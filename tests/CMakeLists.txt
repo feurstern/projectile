@@ -42,12 +42,20 @@ include(Catch)
 
 add_executable(
     projectile_unit_tests
+    unit/collision/test_aabb_intersection.cpp
+    unit/collision/test_collision_world.cpp
+    unit/collision/test_intersection_properties.cpp
+    unit/collision/test_plane_intersection.cpp
+    unit/collision/test_sphere_intersection.cpp
+    unit/collision/test_triangle_intersection.cpp
     unit/core/test_version.cpp
     unit/math/test_aabb.cpp
     unit/math/test_math_utils.cpp
     unit/math/test_plane.cpp
     unit/math/test_ray.cpp
+    unit/math/test_segment.cpp
     unit/math/test_sphere.cpp
+    unit/math/test_triangle.cpp
     unit/math/test_vec2.cpp
     unit/math/test_vec3.cpp)
 target_link_libraries(projectile_unit_tests PRIVATE Projectile::Projectile Catch2::Catch2WithMain)

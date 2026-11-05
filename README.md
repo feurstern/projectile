@@ -6,17 +6,20 @@ collision, and configurable material interactions such as ricochet and penetrati
 only on the C++ standard library. It plugs into your engine through small interfaces instead
 of owning your scene.
 
-> **Status: pre-alpha, Milestone 1 of 7.** The build, packaging, test and CI foundation and the
-> math module (vectors, rays, planes, spheres and boxes) are in place. The simulation features
-> marked as planned below are **not implemented yet**.
+> **Status: pre-alpha, Milestone 2 of 7.** In place so far:
+> - the build, packaging, test and CI foundation;
+> - the math module: vectors, rays, segments, planes, spheres, boxes and triangles;
+> - the collision module: ray and segment intersection, and the collision-world interface.
+>
+> The simulation features marked as planned below are **not implemented yet**.
 
 ## Feature roadmap
 
 | Feature | Release | Status |
 |---|---|---|
 | Vector and mathematical utilities | v0.1 | Done (Milestone 1) |
-| Ray and geometric intersection | v0.1 | Planned (Milestone 2) |
-| Hitscan queries | v0.1 | Planned (Milestone 2) |
+| Ray and geometric intersection | v0.1 | Done (Milestone 2) |
+| Hitscan queries | v0.1 | Done (Milestone 2) |
 | Projectile integration (semi-implicit Euler, RK4) | v0.1 | Planned (Milestone 3) |
 | Gravity and trajectory prediction | v0.1 | Planned (Milestone 3) |
 | Fixed-timestep simulation | v0.1 | Planned (Milestone 4) |
@@ -34,7 +37,7 @@ real-world penetration models.
 ## Architecture
 
 The planned module layering is shown below. Arrows point from a module to the modules it uses.
-`core` and `math` exist today.
+`core`, `math` and `collision` exist today.
 
 ```mermaid
 flowchart TD
@@ -187,7 +190,8 @@ set_target_properties(my_game PROPERTIES CXX_SCAN_FOR_MODULES OFF)
 
 ### Quick start
 
-The projectile simulation API arrives with Milestone 3. Today you can use the math primitives:
+The projectile simulation API arrives with Milestone 3. Today you can run hitscan queries
+against the geometric primitives:
 
 ```cpp
 #include <projectile/projectile.hpp>
@@ -198,27 +202,36 @@ The projectile simulation API arrives with Milestone 3. Today you can use the ma
 using namespace projectile;
 
 int main() {
-    // A shot from a muzzle 1.5 m above the ground towards a target. make_ray() normalizes the
-    // direction, and returns std::nullopt if there is none (zero length, NaN or infinity).
+    // A shot from a muzzle 1.5 m above the ground. make_ray() normalizes the direction, and
+    // returns std::nullopt if there is none (zero length, NaN or infinity).
     const std::optional<Ray> shot = make_ray(Vec3{0.0, 1.5, 0.0}, Vec3{40.0, -1.0, 3.0});
     if (!shot) {
         return 1;
     }
 
-    // Where is the shot 25 m along its path, and how high above the ground plane y = 0?
-    const Plane ground{.normal = {0.0, 1.0, 0.0}, .distance = 0.0};
-    const Vec3 point = point_at(*shot, 25.0);
-    std::printf("height after 25 m: %.3f m\n", signed_distance(ground, point));
+    // Hitscan against a target within 100 m.
+    const Sphere target{.center = {20.0, 1.0, 1.5}, .radius = 0.5};
+    if (const std::optional<HitResult> hit = intersect(*shot, target, 100.0)) {
+        std::printf("target hit after %.2f m\n", hit->distance);
+        // The normal faces the shooter, so reflecting off it gives the ricochet direction.
+        const Vec3 ricochet = reflect(shot->direction, hit->normal);
+        std::printf("ricochet: {%.2f, %.2f, %.2f}\n", ricochet.x, ricochet.y, ricochet.z);
+    }
 
-    // Bounce a velocity off the ground: {3, -4, 0} becomes {3, 4, 0}.
-    const Vec3 bounced = reflect(Vec3{3.0, -4.0, 0.0}, ground.normal);
-    std::printf("bounced: {%g, %g, %g}\n", bounced.x, bounced.y, bounced.z);
+    // Where would the shot reach the ground plane y = 0?
+    const Plane ground{.normal = {0.0, 1.0, 0.0}, .distance = 0.0};
+    if (const std::optional<HitResult> hit = intersect(*shot, ground)) {
+        std::printf("ground reached after %.1f m\n", hit->distance);
+    }
 }
 ```
 
 All quantities are in SI units, and angles are in radians. See
-[docs/mathematics.md](docs/mathematics.md) for the conventions: coordinates, floating-point
-comparisons, and how degenerate input is handled.
+[docs/mathematics.md](docs/mathematics.md) for the mathematical conventions, and
+[docs/collision.md](docs/collision.md) for the query conventions: what a hit reports, front and
+back faces, and boundary and degenerate cases. To query your game's own geometry, implement
+`ICollisionWorld` and call `raycast(world, ray, max_distance)`; `docs/collision.md` has a complete
+example.
 
 ### Checking the library version
 

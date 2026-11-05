@@ -26,7 +26,17 @@ may contain breaking changes.
   - Geometric primitives `Ray`, `Plane`, `Sphere` and `AABB`, with validating builders
     (`make_ray`, `make_plane`, `plane_through_points`, `make_aabb`) and `is_valid` checks.
   - Scalar helpers: `approx_equal` and degree/radian conversion.
-- Documentation of the numerical conventions in `docs/mathematics.md`.
+  - `Segment` and `Triangle` primitives, with `face_normal` for triangles.
+- Collision module (`projectile/collision/`):
+  - `HitResult`: distance, contact point, a normal facing the query, material id, and whether a
+    front or back face was hit.
+  - `intersect()` for rays and segments against planes, spheres, boxes and triangles, with
+    optional back-face culling (`Culling`) and the same boundary-contact and degenerate-case
+    rules for every shape.
+  - `ICollisionWorld`, the interface to an application's collision geometry, with the validated
+    entry points `raycast()` and `sweep_sphere()`.
+- Documentation of the numerical conventions in `docs/mathematics.md` and of the collision query
+  conventions in `docs/collision.md`.
 - Test suite built on Catch2 v3:
   - unit tests;
   - a build-time check that every public header compiles on its own;

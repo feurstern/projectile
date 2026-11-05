@@ -71,7 +71,7 @@ set(CMAKE_CXX_SCAN_FOR_MODULES OFF)
 # Core library
 # --------------------------------------------------------------------------------------------
 
-add_library(projectile src/core/version.cpp)
+add_library(projectile src/collision/intersection.cpp src/core/version.cpp)
 add_library(Projectile::Projectile ALIAS projectile)
 
 target_compile_features(projectile PUBLIC cxx_std_20)

@@ -6,12 +6,19 @@
 /// Including individual headers instead keeps compile times down; this header is a
 /// convenience for applications and examples.
 
+#include "projectile/collision/collision_world.hpp"
+#include "projectile/collision/hit_result.hpp"
+#include "projectile/collision/intersection.hpp"
+#include "projectile/collision/raycast.hpp"
+#include "projectile/collision/sweep.hpp"
 #include "projectile/core/export.hpp"
 #include "projectile/core/version.hpp"
 #include "projectile/math/aabb.hpp"
 #include "projectile/math/math_utils.hpp"
 #include "projectile/math/plane.hpp"
 #include "projectile/math/ray.hpp"
+#include "projectile/math/segment.hpp"
 #include "projectile/math/sphere.hpp"
+#include "projectile/math/triangle.hpp"
 #include "projectile/math/vec2.hpp"
 #include "projectile/math/vec3.hpp"

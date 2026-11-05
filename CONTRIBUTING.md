@@ -50,7 +50,7 @@ To fix formatting, run the last command with `-i` in place of `--dry-run --Werro
 | `tests/unit/<module>/` | Catch2 unit tests, mirroring the header layout. |
 | `tests/support/` | Shared test helpers: value printers, tolerance matchers, the seeded random generator. |
 | `tests/package/` | Downstream projects that test installation and embedding. |
-| `docs/` | Technical documentation, such as the [mathematical conventions](docs/mathematics.md). |
+| `docs/` | Technical documentation: the [mathematical conventions](docs/mathematics.md) and the [collision query conventions](docs/collision.md). |
 | `cmake/` | CMake modules: compiler options, version parsing, the package template. |
 | `.github/workflows/` | CI, sanitizer and release workflows. |
 
@@ -141,6 +141,12 @@ The full conventions are in [docs/mathematics.md](docs/mathematics.md). In short
     comment.
 - Keep tolerances valid when the compiler fuses multiply-adds (Clang does on ARM64): compare
   exactly only where the arithmetic is exact.
+- Compare points inside a segment within a tolerance. They come from `std::lerp`, whose rounding
+  differs between standard libraries; only the endpoints are exact.
+- Derive a property test's expected outcome from the actual geometry, not from how the input was
+  generated. A random point meant to lie outside a shape can still land inside it.
+- Test code has its own `tests/.clang-tidy`. It inherits the project configuration and disables
+  only a check that misfires on Catch2's macros.
 
 ## Definition of done
 
