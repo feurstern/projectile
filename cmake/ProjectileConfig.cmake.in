@@ -1,0 +1,6 @@
+@PACKAGE_INIT@
+
+# Projectile's core has no dependencies, so the package only needs its exported targets.
+include("${CMAKE_CURRENT_LIST_DIR}/ProjectileTargets.cmake")
+
+check_required_components(Projectile)
