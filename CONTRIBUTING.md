@@ -48,7 +48,9 @@ To fix formatting, run the last command with `-i` in place of `--dry-run --Werro
 | `include/projectile/<module>/` | Public headers, one directory per module (`core`, `math`, `collision`, ...). |
 | `src/<module>/` | Library implementation files. |
 | `tests/unit/<module>/` | Catch2 unit tests, mirroring the header layout. |
+| `tests/support/` | Shared test helpers: value printers, tolerance matchers, the seeded random generator. |
 | `tests/package/` | Downstream projects that test installation and embedding. |
+| `docs/` | Technical documentation, such as the [mathematical conventions](docs/mathematics.md). |
 | `cmake/` | CMake modules: compiler options, version parsing, the package template. |
 | `.github/workflows/` | CI, sanitizer and release workflows. |
 
@@ -78,6 +80,15 @@ The naming rules below are enforced by clang-tidy (`readability-identifier-namin
   `namespace projectile::detail` when templates require them in a header.
 - Mark functions defined in `src/` with `PROJECTILE_API` so that shared builds export them.
   Inline, `constexpr` and template code needs no marker.
+- Call `(std::min)(a, b)` and `(std::max)(a, b)` in public headers, with the parentheses, so that
+  the `min`/`max` macros of `<windows.h>` cannot break them.
+
+### Initialization
+
+- Initialize vectors positionally: `Vec3{x, y, z}`.
+- Use designated initializers for structs whose members differ in meaning:
+  `Ray{.origin = muzzle, .direction = aim}`.
+- clang-tidy cannot tell these cases apart, so this rule is enforced in review.
 
 ### API documentation
 
@@ -86,10 +97,14 @@ units, preconditions, and what happens on invalid input.
 
 ### Units and numerics
 
+The full conventions are in [docs/mathematics.md](docs/mathematics.md). In short:
+
 - SI units (meters, seconds, kilograms, newtons) and radians.
 - `double` throughout.
 - There is no fixed "up" axis: gravity is a configurable vector.
-- Never compare computed floating-point values for exact equality, in code or in tests.
+- Compare computed floating-point values with `approx_equal()` or a tolerance. Exact comparison
+  is only for results that are exact by construction, such as arithmetic on small integers or
+  powers of two.
 
 ### Error handling
 
@@ -114,6 +129,18 @@ units, preconditions, and what happens on invalid input.
   with tolerances that suit the algorithm (`Catch::Matchers::WithinAbs` / `WithinRel`).
 - Cover edge cases: zero vectors, parallel rays, degenerate geometry, boundary contact and
   non-finite input.
+- Use the helpers in `tests/support/`:
+  - `math_matchers.hpp` prints math types with all 17 digits.
+  - `CHECK_THAT(actual, is_near(expected))` compares vectors within a tolerance.
+  - `require_value()` unwraps a `std::optional`, failing the test if it is empty.
+- Tag property tests (properties checked on many random inputs) `[property]`. Draw the inputs from
+  `projectile::test::Random` (`support/random.hpp`), which uses Catch2's seed:
+  - CTest pins the seed with `--rng-seed=20261105`, so failures are reproducible.
+  - To explore other inputs, run the test binary with `--rng-seed random`.
+  - Skip inputs that are ill-conditioned for the property under test, and explain why in a
+    comment.
+- Keep tolerances valid when the compiler fuses multiply-adds (Clang does on ARM64): compare
+  exactly only where the arithmetic is exact.
 
 ## Definition of done
 
