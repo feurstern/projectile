@@ -1,0 +1,25 @@
+# Build and install trees (the CMake presets build into build/<preset>)
+/build/
+/build-*/
+/out/
+/install/
+
+# User-local CMake files
+CMakeUserPresets.json
+CMakeLists.txt.user
+
+# Tooling output and caches
+/.cache/
+/compile_commands.json
+Testing/
+
+# IDEs and editors
+/.vs/
+/.vscode/
+/.idea/
+*.swp
+*~
+
+# Operating-system files
+.DS_Store
+Thumbs.db
