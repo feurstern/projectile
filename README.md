@@ -6,15 +6,15 @@ collision, and configurable material interactions such as ricochet and penetrati
 only on the C++ standard library. It plugs into your engine through small interfaces instead
 of owning your scene.
 
-> **Status: pre-alpha, Milestone 0 of 7.** The build, packaging, test and CI foundation is in
-> place. The simulation features listed below are **planned and not implemented yet**. Today
-> the public API consists only of version reporting.
+> **Status: pre-alpha, Milestone 1 of 7.** The build, packaging, test and CI foundation and the
+> math module (vectors, rays, planes, spheres and boxes) are in place. The simulation features
+> marked as planned below are **not implemented yet**.
 
 ## Feature roadmap
 
 | Feature | Release | Status |
 |---|---|---|
-| Vector and mathematical utilities | v0.1 | Planned (Milestone 1) |
+| Vector and mathematical utilities | v0.1 | Done (Milestone 1) |
 | Ray and geometric intersection | v0.1 | Planned (Milestone 2) |
 | Hitscan queries | v0.1 | Planned (Milestone 2) |
 | Projectile integration (semi-implicit Euler, RK4) | v0.1 | Planned (Milestone 3) |
@@ -34,7 +34,7 @@ real-world penetration models.
 ## Architecture
 
 The planned module layering is shown below. Arrows point from a module to the modules it uses.
-Only `core` exists today.
+`core` and `math` exist today.
 
 ```mermaid
 flowchart TD
@@ -187,8 +187,43 @@ set_target_properties(my_game PROPERTIES CXX_SCAN_FOR_MODULES OFF)
 
 ### Quick start
 
-The projectile API arrives with Milestone 3. Today you can check which version of the library
-your program is linked against:
+The projectile simulation API arrives with Milestone 3. Today you can use the math primitives:
+
+```cpp
+#include <projectile/projectile.hpp>
+
+#include <cstdio>
+#include <optional>
+
+using namespace projectile;
+
+int main() {
+    // A shot from a muzzle 1.5 m above the ground towards a target. make_ray() normalizes the
+    // direction, and returns std::nullopt if there is none (zero length, NaN or infinity).
+    const std::optional<Ray> shot = make_ray(Vec3{0.0, 1.5, 0.0}, Vec3{40.0, -1.0, 3.0});
+    if (!shot) {
+        return 1;
+    }
+
+    // Where is the shot 25 m along its path, and how high above the ground plane y = 0?
+    const Plane ground{.normal = {0.0, 1.0, 0.0}, .distance = 0.0};
+    const Vec3 point = point_at(*shot, 25.0);
+    std::printf("height after 25 m: %.3f m\n", signed_distance(ground, point));
+
+    // Bounce a velocity off the ground: {3, -4, 0} becomes {3, 4, 0}.
+    const Vec3 bounced = reflect(Vec3{3.0, -4.0, 0.0}, ground.normal);
+    std::printf("bounced: {%g, %g, %g}\n", bounced.x, bounced.y, bounced.z);
+}
+```
+
+All quantities are in SI units, and angles are in radians. See
+[docs/mathematics.md](docs/mathematics.md) for the conventions: coordinates, floating-point
+comparisons, and how degenerate input is handled.
+
+### Checking the library version
+
+To detect headers and a library from different releases, compare the version your program was
+compiled against with the version of the library it linked:
 
 ```cpp
 #include <projectile/projectile.hpp>
@@ -217,7 +252,9 @@ int main() {
 
 `ctest --preset dev` runs the whole suite. Tests carry labels:
 
-- `unit`: Catch2 unit tests.
+- `unit`: Catch2 unit tests. These include property tests that check mathematical properties on
+  10,000 random inputs each. CTest pins the random seed, so every run checks the same inputs; to
+  explore other inputs, run `build/dev/bin/projectile_unit_tests "[property]" --rng-seed random`.
 - `package`: installs the library into a staging prefix, then configures, builds and runs a
   small downstream project with `find_package(Projectile)` and with `add_subdirectory`. These
   take a few seconds; skip them with `ctest --preset dev -LE package`.
