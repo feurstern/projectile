@@ -1,0 +1,112 @@
+name: Release
+
+# Publishing a release: bump the version in include/projectile/core/version.hpp, add a
+# "## [X.Y.Z]" section to CHANGELOG.md, then push the tag vX.Y.Z (see CONTRIBUTING.md).
+# Running this workflow manually is a dry run: it builds the archives but publishes nothing.
+on:
+  push:
+    tags: ['v[0-9]+.[0-9]+.[0-9]+*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  ci:
+    name: CI
+    uses: ./.github/workflows/ci.yml
+
+  package:
+    name: Source archives
+    needs: ci
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Read version
+        id: version
+        run: |
+          version="$(cmake -P cmake/ProjectileVersion.cmake)"
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+          echo "Projectile ${version}"
+
+      - name: Check tag and changelog
+        if: github.event_name == 'push'
+        env:
+          TAG: ${{ github.ref_name }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          tag_version="${TAG#v}"
+          if [ "${tag_version%%-*}" != "${VERSION}" ]; then
+            echo "::error::Tag ${TAG} does not match version.hpp (${VERSION})"
+            exit 1
+          fi
+          if ! grep -q "^## \[${VERSION}\]" CHANGELOG.md; then
+            echo "::error::CHANGELOG.md has no '## [${VERSION}]' section"
+            exit 1
+          fi
+
+      - name: Create archives and checksums
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          name="projectile-${VERSION}"
+          mkdir dist
+          git archive --format=tar.gz --prefix="${name}/" --output="dist/${name}.tar.gz" HEAD
+          git archive --format=zip --prefix="${name}/" --output="dist/${name}.zip" HEAD
+          (cd dist && sha256sum -- * > SHA256SUMS)
+          cat dist/SHA256SUMS
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: release-archives
+          path: dist/
+          if-no-files-found: error
+
+  publish:
+    name: Publish GitHub release
+    needs: package
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: release-archives
+          path: dist
+
+      - name: Extract release notes from CHANGELOG.md
+        env:
+          VERSION: ${{ needs.package.outputs.version }}
+        run: |
+          awk -v version="${VERSION}" '
+            index($0, "## [" version "]") == 1 { found = 1; next }
+            found && /^## \[/ { exit }
+            found { print }
+          ' CHANGELOG.md > notes.md
+          if [ ! -s notes.md ]; then
+            echo "::error::No release notes found for ${VERSION} in CHANGELOG.md"
+            exit 1
+          fi
+
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+          VERSION: ${{ needs.package.outputs.version }}
+        run: |
+          flags=()
+          # Tags with a suffix, such as v0.2.0-rc1, are published as pre-releases.
+          if [[ "${TAG}" == *-* ]]; then
+            flags+=(--prerelease)
+          fi
+          gh release create "${TAG}" dist/* \
+            --verify-tag \
+            --title "Projectile ${VERSION}" \
+            --notes-file notes.md \
+            "${flags[@]}"
