@@ -40,12 +40,26 @@ include(Catch)
 # Unit tests
 # --------------------------------------------------------------------------------------------
 
-add_executable(projectile_unit_tests unit/core/test_version.cpp)
+add_executable(
+    projectile_unit_tests
+    unit/core/test_version.cpp
+    unit/math/test_aabb.cpp
+    unit/math/test_math_utils.cpp
+    unit/math/test_plane.cpp
+    unit/math/test_ray.cpp
+    unit/math/test_sphere.cpp
+    unit/math/test_vec2.cpp
+    unit/math/test_vec3.cpp)
 target_link_libraries(projectile_unit_tests PRIVATE Projectile::Projectile Catch2::Catch2WithMain)
+# Test helpers in support/ are included as "support/<name>.hpp".
+target_include_directories(projectile_unit_tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
 projectile_target_warnings(projectile_unit_tests)
 projectile_target_clang_tidy(projectile_unit_tests)
 
-catch_discover_tests(projectile_unit_tests PROPERTIES LABELS unit)
+# Property tests draw random inputs from Catch2's generator. CTest pins its seed so that every run,
+# including CI, checks the same inputs; run the test binary with `--rng-seed random` to explore.
+# (One token: catch_discover_tests would merge a separate value into the same argument.)
+catch_discover_tests(projectile_unit_tests EXTRA_ARGS --rng-seed=20261105 PROPERTIES LABELS unit)
 
 # --------------------------------------------------------------------------------------------
 # Header self-containment
