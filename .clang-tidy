@@ -1,0 +1,62 @@
+---
+# Static-analysis rules for Projectile. CI runs clang-tidy 22.1.8 through the build
+# (cmake -DPROJECTILE_ENABLE_CLANG_TIDY=ON); every finding is an error.
+#
+# Disabled checks and why:
+#   bugprone-easily-swappable-parameters  fires on nearly every math API (e.g. two Vec3 arguments)
+#   *-avoid-magic-numbers                 physics code is full of meaningful literals
+#   cppcoreguidelines-macro-usage         export and version macros are required by design
+#   *-macro-to-enum                       would turn the PROJECTILE_VERSION_* macros into an enum
+#   modernize-use-trailing-return-type    style preference, not adopted
+#   misc-include-cleaner                  results depend on the standard-library implementation
+#   readability-identifier-length         short names (x, y, t, dt) are idiomatic in math code
+#   portability-avoid-pragma-once         the project deliberately uses #pragma once
+Checks: >
+  -*,
+  bugprone-*,
+  -bugprone-easily-swappable-parameters,
+  clang-analyzer-*,
+  concurrency-*,
+  cppcoreguidelines-*,
+  -cppcoreguidelines-avoid-magic-numbers,
+  -cppcoreguidelines-macro-to-enum,
+  -cppcoreguidelines-macro-usage,
+  misc-*,
+  -misc-include-cleaner,
+  modernize-*,
+  -modernize-macro-to-enum,
+  -modernize-use-trailing-return-type,
+  performance-*,
+  portability-*,
+  -portability-avoid-pragma-once,
+  readability-*,
+  -readability-identifier-length,
+  -readability-magic-numbers
+WarningsAsErrors: '*'
+HeaderFilterRegex: 'include/projectile/'
+FormatStyle: none
+CheckOptions:
+  # Plain data structs (Vec3, HitResult, ...) intentionally expose public members.
+  misc-non-private-member-variables-in-classes.IgnoreClassesWithAllMemberVariablesBeingPublic: true
+  cppcoreguidelines-non-private-member-variables-in-classes.IgnoreClassesWithAllMemberVariablesBeingPublic: true
+  cppcoreguidelines-avoid-do-while.IgnoreMacros: true
+  readability-function-cognitive-complexity.IgnoreMacros: true
+  # Naming conventions from the engineering specification.
+  readability-identifier-naming.NamespaceCase: lower_case
+  readability-identifier-naming.ClassCase: CamelCase
+  readability-identifier-naming.StructCase: CamelCase
+  readability-identifier-naming.UnionCase: CamelCase
+  readability-identifier-naming.EnumCase: CamelCase
+  readability-identifier-naming.EnumConstantCase: lower_case
+  readability-identifier-naming.TemplateParameterCase: CamelCase
+  readability-identifier-naming.FunctionCase: lower_case
+  readability-identifier-naming.MethodCase: lower_case
+  readability-identifier-naming.VariableCase: lower_case
+  readability-identifier-naming.ParameterCase: lower_case
+  readability-identifier-naming.MemberCase: lower_case
+  readability-identifier-naming.PrivateMemberSuffix: _
+  readability-identifier-naming.ProtectedMemberSuffix: _
+  readability-identifier-naming.ConstexprVariableCase: lower_case
+  # Compile-time constants may also use SCREAMING_SNAKE_CASE where appropriate.
+  readability-identifier-naming.ConstexprVariableIgnoredRegexp: '^[A-Z][A-Z0-9_]*$'
+  readability-identifier-naming.MacroDefinitionCase: UPPER_CASE
