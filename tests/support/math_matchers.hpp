@@ -7,7 +7,9 @@
 #include "projectile/math/math_utils.hpp"
 #include "projectile/math/plane.hpp"
 #include "projectile/math/ray.hpp"
+#include "projectile/math/segment.hpp"
 #include "projectile/math/sphere.hpp"
+#include "projectile/math/triangle.hpp"
 #include "projectile/math/vec2.hpp"
 #include "projectile/math/vec3.hpp"
 
@@ -121,6 +123,23 @@ struct Catch::StringMaker<projectile::Sphere> {
     static std::string convert(const projectile::Sphere& sphere) {
         using projectile::test::format;
         return "Sphere{center " + format(sphere.center) + ", radius " + format(sphere.radius) + "}";
+    }
+};
+
+template <>
+struct Catch::StringMaker<projectile::Segment> {
+    static std::string convert(const projectile::Segment& segment) {
+        using projectile::test::format;
+        return "Segment{start " + format(segment.start) + ", end " + format(segment.end) + "}";
+    }
+};
+
+template <>
+struct Catch::StringMaker<projectile::Triangle> {
+    static std::string convert(const projectile::Triangle& triangle) {
+        using projectile::test::format;
+        return "Triangle{" + format(triangle.a) + ", " + format(triangle.b) + ", " +
+               format(triangle.c) + "}";
     }
 };
 
