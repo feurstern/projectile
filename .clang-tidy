@@ -9,7 +9,11 @@
 #   *-macro-to-enum                       would turn the PROJECTILE_VERSION_* macros into an enum
 #   modernize-use-trailing-return-type    style preference, not adopted
 #   misc-include-cleaner                  results depend on the standard-library implementation
+#   modernize-use-designated-initializers positional Vec3{x, y, z} is clearer for math types;
+#                                         designated initializers are still used, by review,
+#                                         for structs whose members differ in meaning
 #   readability-identifier-length         short names (x, y, t, dt) are idiomatic in math code
+#   readability-math-missing-parentheses  formulas rely on standard algebraic precedence
 #   portability-avoid-pragma-once         the project deliberately uses #pragma once
 Checks: >
   -*,
@@ -25,13 +29,15 @@ Checks: >
   -misc-include-cleaner,
   modernize-*,
   -modernize-macro-to-enum,
+  -modernize-use-designated-initializers,
   -modernize-use-trailing-return-type,
   performance-*,
   portability-*,
   -portability-avoid-pragma-once,
   readability-*,
   -readability-identifier-length,
-  -readability-magic-numbers
+  -readability-magic-numbers,
+  -readability-math-missing-parentheses
 WarningsAsErrors: '*'
 HeaderFilterRegex: 'include/projectile/'
 FormatStyle: none
