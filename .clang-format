@@ -1,0 +1,56 @@
+---
+# Formatting rules for Projectile. CI checks formatting with clang-format 22.1.8
+# (`pip install clang-format==22.1.8`); use the same version locally to get identical output.
+Language: Cpp
+BasedOnStyle: LLVM
+Standard: c++20
+
+ColumnLimit: 100
+IndentWidth: 4
+ContinuationIndentWidth: 4
+AccessModifierOffset: -4
+NamespaceIndentation: None
+FixNamespaceComments: true
+IndentPPDirectives: AfterHash
+PPIndentWidth: 2
+
+PointerAlignment: Left
+ReferenceAlignment: Pointer
+DerivePointerAlignment: false
+
+# When a call or declaration does not fit on one line, put each argument on its own line and
+# the closing parenthesis on a line of its own.
+AlignAfterOpenBracket: BlockIndent
+BinPackArguments: false
+BinPackParameters: OnePerLine
+AllowAllArgumentsOnNextLine: true
+AllowAllParametersOfDeclarationOnNextLine: true
+# Prefer breaking the parameter list over putting a return type on its own line.
+PenaltyReturnTypeOnItsOwnLine: 200
+
+AllowShortFunctionsOnASingleLine: Inline
+AllowShortIfStatementsOnASingleLine: Never
+AllowShortLoopsOnASingleLine: false
+AllowShortBlocksOnASingleLine: Never
+AllowShortEnumsOnASingleLine: false
+BreakTemplateDeclarations: Yes
+BreakConstructorInitializers: BeforeColon
+PackConstructorInitializers: NextLine
+
+InsertNewlineAtEOF: true
+MaxEmptyLinesToKeep: 1
+KeepEmptyLines:
+  AtStartOfBlock: false
+
+# Include order: the file's own header, Projectile headers, third-party headers, then the
+# standard library.
+IncludeBlocks: Regroup
+IncludeCategories:
+  - Regex: '^[<"]projectile/'
+    Priority: 1
+  - Regex: '^<catch2/'
+    Priority: 2
+  - Regex: '^<[a-z_]+>$'
+    Priority: 4
+  - Regex: '.*'
+    Priority: 3
