@@ -111,6 +111,8 @@ The primitives are plain aggregates, so you can initialize them directly:
 | `Plane` | `normal`, `distance`; the points `p` with `dot(normal, p) == distance` | Unit-length normal, pointing to the front side; finite distance |
 | `Sphere` | `center`, `radius` | Finite center; finite, non-negative radius. Radius 0 is a point |
 | `AABB` | corners `min`, `max` | Finite corners with `min ≤ max` on every axis. Flat boxes (`min == max` on an axis) are valid |
+| `Segment` | `start`, `end`; the points `start + f · (end − start)` for `0 ≤ f ≤ 1` | Finite endpoints. Zero length is valid but never hits anything |
+| `Triangle` | vertices `a`, `b`, `c`; counter-clockwise when seen from the front | Finite vertices. Zero area is valid but never hits anything; `face_normal()` gives the front normal |
 
 Because they are aggregates, nothing stops a primitive from breaking its invariants. There are
 two safeguards:
