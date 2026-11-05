@@ -1,0 +1,10 @@
+---
+# Test code follows the project configuration, with one exception:
+#
+#   clang-analyzer-optin.core.EnumCastOutOfRange
+#       Catch2's assertion macros combine the bit-flag values of its internal ResultDisposition
+#       enum (CHECK_FALSE uses 2 | 4 = 6), which this opt-in check misreports as an invalid enum
+#       value. Library code keeps the check.
+InheritParentConfig: true
+Checks: >
+  -clang-analyzer-optin.core.EnumCastOutOfRange
