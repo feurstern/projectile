@@ -29,3 +29,15 @@ TEST_CASE("is_valid requires finite endpoints", "[math][segment]") {
     CHECK_FALSE(is_valid(Segment{.start = {not_a_number, 0.0, 0.0}, .end = {}}));
     CHECK_FALSE(is_valid(Segment{.start = {}, .end = {0.0, infinity, 0.0}}));
 }
+
+TEST_CASE("closest_point finds the nearest point of a segment", "[math][segment]") {
+    constexpr Segment segment{.start = {0.0, 0.0, 0.0}, .end = {4.0, 0.0, 0.0}};
+    // Beside the segment: the foot of the perpendicular.
+    STATIC_REQUIRE(closest_point(segment, Vec3{1.0, 3.0, -2.0}) == Vec3{1.0, 0.0, 0.0});
+    // Beyond either end: that end.
+    STATIC_REQUIRE(closest_point(segment, Vec3{-2.0, 1.0, 0.0}) == segment.start);
+    STATIC_REQUIRE(closest_point(segment, Vec3{9.0, -1.0, 5.0}) == segment.end);
+    // A segment of zero length is its start.
+    constexpr Segment point{.start = {1.0, 2.0, 3.0}, .end = {1.0, 2.0, 3.0}};
+    STATIC_REQUIRE(closest_point(point, Vec3{}) == point.start);
+}
