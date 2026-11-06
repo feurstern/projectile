@@ -39,7 +39,8 @@ is handled. Later modules (collision, ballistics, materials) build on these rule
 - **Last-bit differences are possible across platforms.** Some compilers fuse a multiplication
   and an addition into one instruction (FMA), with one rounding instead of two. Clang does this by
   default on ARM64. Results can therefore differ in the last bits between platforms. Results are
-  reproducible on the same platform with the same compiler settings.
+  reproducible on the same platform with the same compiler settings; see
+  [simulation.md](simulation.md#determinism).
 
 ## Comparing floating-point values
 
@@ -129,6 +130,9 @@ Further conventions:
   the plane (the side the normal points to), negative behind it, and zero on it.
   `plane_through_points(a, b, c)` orients the normal by the right-hand rule: it points towards the
   side from which `a → b → c` appear counter-clockwise.
+- **Closest points.** `closest_point(shape, p)` gives the point of a plane, box, segment or
+  triangle nearest to `p`; for a box that contains `p`, it is `p` itself. Its distance to `p` is
+  the distance from `p` to the shape.
 - **Containment is inclusive.** `contains()` counts points on the surface of a sphere or the
   boundary of a box as inside. A point computed to lie exactly on a surface may land on either
   side by rounding.
