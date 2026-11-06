@@ -35,8 +35,24 @@ may contain breaking changes.
     rules for every shape.
   - `ICollisionWorld`, the interface to an application's collision geometry, with the validated
     entry points `raycast()` and `sweep_sphere()`.
-- Documentation of the numerical conventions in `docs/mathematics.md` and of the collision query
-  conventions in `docs/collision.md`.
+- Ballistics module (`projectile/ballistics/`):
+  - `ProjectileConfig` (mass, radius, initial velocity, gravity, lifetime) and `ProjectileState`
+    (position, velocity, acceleration, remaining lifetime, active), created with
+    `create_projectile`.
+  - `SemiImplicitEuler` (the default) and `RungeKutta4` integrators, selectable at run time with
+    `IntegratorKind`. Each step stops at the end of the projectile's lifetime, and accepts any
+    custom `AccelerationField`.
+  - `predict_trajectory`: samples a projectile's future path with the same steps a simulation
+    takes, optionally stopping at the first hit in a collision world, and can reuse its output
+    buffer. Also `ballistic_position` and `ballistic_velocity` for the exact motion under
+    constant acceleration.
+- Core: the `Error` codes and `Result<T>` type used to reject invalid configuration, and the
+  `standard_gravity` constant.
+- Examples `01_basic_projectile` and `02_ballistic_drop`, built by default
+  (`PROJECTILE_BUILD_EXAMPLES`) and run as tests.
+- Documentation of the numerical conventions in `docs/mathematics.md`, of the collision query
+  conventions in `docs/collision.md`, and of the integrators' accuracy and stability in
+  `docs/ballistics.md`.
 - Test suite built on Catch2 v3:
   - unit tests;
   - a build-time check that every public header compiles on its own;
