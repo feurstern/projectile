@@ -63,4 +63,10 @@ struct AABB {
            point.y <= box.max.y && point.z >= box.min.z && point.z <= box.max.z;
 }
 
+/// The point of @p box closest to @p point: @p point itself if the box contains it, otherwise
+/// the nearest point on the box's surface. Computed by clamping each coordinate, so it is exact.
+[[nodiscard]] constexpr Vec3 closest_point(const AABB& box, const Vec3& point) noexcept {
+    return detail::component_max(box.min, detail::component_min(point, box.max));
+}
+
 } // namespace projectile
