@@ -46,12 +46,13 @@ To fix formatting, run the last command with `-i` in place of `--dry-run --Werro
 | Path | Contents |
 |---|---|
 | `include/projectile/<module>/` | Public headers, one directory per module (`core`, `math`, `collision`, ...). |
-| `src/<module>/` | Library implementation files. |
+| `src/<module>/` | Library implementation files, and headers internal to the library, which are not installed. |
 | `tests/unit/<module>/` | Catch2 unit tests, mirroring the header layout. |
-| `tests/support/` | Shared test helpers: value printers, tolerance matchers, the seeded random generator. |
+| `tests/integration/` | Tests of complete workflows across modules, in their own test program. |
+| `tests/support/` | Shared test helpers: value printers, tolerance matchers, the seeded random generator, an allocation counter. |
 | `tests/package/` | Downstream projects that test installation and embedding. |
 | `examples/` | Example programs, one directory each, run as tests. |
-| `docs/` | Technical documentation: the [mathematical conventions](docs/mathematics.md), the [collision query conventions](docs/collision.md) and the [ballistics](docs/ballistics.md). |
+| `docs/` | Technical documentation: the [mathematical conventions](docs/mathematics.md), the [collision query conventions](docs/collision.md), the [ballistics](docs/ballistics.md) and the [simulation](docs/simulation.md). |
 | `cmake/` | CMake modules: compiler options, version parsing, the package template. |
 | `.github/workflows/` | CI, sanitizer and release workflows. |
 
@@ -79,6 +80,8 @@ The naming rules below are enforced by clang-tidy (`readability-identifier-namin
 - Never put `using namespace` in a header.
 - Public API lives in `namespace projectile`. Keep implementation details in `src/`, or in
   `namespace projectile::detail` when templates require them in a header.
+- Code shared by several library source files goes in an internal header under `src/<module>/`,
+  included as `"<module>/<name>.hpp"`. Internal headers are not installed.
 - Mark functions defined in `src/` with `PROJECTILE_API` so that shared builds export them.
   Inline, `constexpr` and template code needs no marker.
 - Call `(std::min)(a, b)` and `(std::max)(a, b)` in public headers, with the parentheses, so that
@@ -125,7 +128,7 @@ The full conventions are in [docs/mathematics.md](docs/mathematics.md). In short
 ## Tests
 
 - Write tests with Catch2 v3 in `tests/unit/<module>/test_<name>.cpp`, and add new files to
-  `tests/CMakeLists.txt`.
+  `tests/CMakeLists.txt`. Tests of whole workflows across modules go in `tests/integration/`.
 - Tag test cases as `[module][topic]`. CTest labels separate `unit` from `package` tests.
 - Test behavior, not construction. Compare numerical results against analytical solutions,
   with tolerances that suit the algorithm (`Catch::Matchers::WithinAbs` / `WithinRel`).
@@ -150,6 +153,12 @@ The full conventions are in [docs/mathematics.md](docs/mathematics.md). In short
 - Test code has its own `tests/.clang-tidy`. It inherits the project configuration and disables
   only a check that misfires on Catch2's macros. Likewise, `examples/.clang-tidy` allows `printf`
   and exceptions escaping `main` in the example programs.
+- To prove that code does not allocate, count allocations with `test::allocation_count()`
+  (`support/allocation_counter.hpp`) around it, in the integration tests, which replace the
+  global `operator new`. Keep Catch2 assertions out of the counted code: they allocate.
+- Check geometry against an independent computation. The sweep tests compare every contact with
+  the distance to the shape, and box sweeps with sweeps against the box's triangles; this found a
+  bug that hand-picked cases missed.
 - Measure an integrator's order of convergence on a problem that shows it. For example,
   semi-implicit Euler is only first order, yet its error on a circular orbit sampled after whole
   periods shrinks at second order.
