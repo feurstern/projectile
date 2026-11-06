@@ -42,12 +42,16 @@ include(Catch)
 
 add_executable(
     projectile_unit_tests
+    unit/ballistics/test_integrator.cpp
+    unit/ballistics/test_projectile.cpp
+    unit/ballistics/test_trajectory.cpp
     unit/collision/test_aabb_intersection.cpp
     unit/collision/test_collision_world.cpp
     unit/collision/test_intersection_properties.cpp
     unit/collision/test_plane_intersection.cpp
     unit/collision/test_sphere_intersection.cpp
     unit/collision/test_triangle_intersection.cpp
+    unit/core/test_result.cpp
     unit/core/test_version.cpp
     unit/math/test_aabb.cpp
     unit/math/test_math_utils.cpp
