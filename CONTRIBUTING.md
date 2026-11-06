@@ -50,7 +50,8 @@ To fix formatting, run the last command with `-i` in place of `--dry-run --Werro
 | `tests/unit/<module>/` | Catch2 unit tests, mirroring the header layout. |
 | `tests/support/` | Shared test helpers: value printers, tolerance matchers, the seeded random generator. |
 | `tests/package/` | Downstream projects that test installation and embedding. |
-| `docs/` | Technical documentation: the [mathematical conventions](docs/mathematics.md) and the [collision query conventions](docs/collision.md). |
+| `examples/` | Example programs, one directory each, run as tests. |
+| `docs/` | Technical documentation: the [mathematical conventions](docs/mathematics.md), the [collision query conventions](docs/collision.md) and the [ballistics](docs/ballistics.md). |
 | `cmake/` | CMake modules: compiler options, version parsing, the package template. |
 | `.github/workflows/` | CI, sanitizer and release workflows. |
 
@@ -110,7 +111,8 @@ The full conventions are in [docs/mathematics.md](docs/mathematics.md). In short
 
 - An expected geometric miss is not an error; return `std::optional`.
 - Reject invalid configuration explicitly at the public API boundary, for example non-finite or
-  negative values.
+  negative values. Functions that take a configuration return a `Result<T>` or a
+  `std::optional<Error>`; add an `Error` value, with a description, for each new kind of problem.
 - Do not use exceptions as control flow in collision queries.
 
 ### Performance
@@ -146,7 +148,11 @@ The full conventions are in [docs/mathematics.md](docs/mathematics.md). In short
 - Derive a property test's expected outcome from the actual geometry, not from how the input was
   generated. A random point meant to lie outside a shape can still land inside it.
 - Test code has its own `tests/.clang-tidy`. It inherits the project configuration and disables
-  only a check that misfires on Catch2's macros.
+  only a check that misfires on Catch2's macros. Likewise, `examples/.clang-tidy` allows `printf`
+  and exceptions escaping `main` in the example programs.
+- Measure an integrator's order of convergence on a problem that shows it. For example,
+  semi-implicit Euler is only first order, yet its error on a circular orbit sampled after whole
+  periods shrinks at second order.
 
 ## Definition of done
 
