@@ -267,7 +267,7 @@ std::optional<HitResult> ray_hit(const Ray& ray, const std::optional<LineHit>& h
     return HitResult{
         .distance = hit->parameter + 0.0, // turns a distance of -0 into +0
         .point = point_at(ray, hit->parameter),
-        .normal = hit->normal,
+        .normal = hit->normal + Vec3{}, // turns components of -0, from negated normals, into +0
         .material_id = 0,
         .front_face = hit->front_face,
     };
@@ -282,7 +282,7 @@ std::optional<HitResult> segment_hit(
     return HitResult{
         .distance = hit->parameter * length(segment) + 0.0,        // turns a distance of -0 into +0
         .point = lerp(segment.start, segment.end, hit->parameter), // exact at both endpoints
-        .normal = hit->normal,
+        .normal = hit->normal + Vec3{},                            // turns components of -0 into +0
         .material_id = 0,
         .front_face = hit->front_face,
     };

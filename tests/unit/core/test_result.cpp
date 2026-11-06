@@ -61,6 +61,9 @@ TEST_CASE("every error has its own description", "[core][result]") {
         Error::invalid_time_step,
         Error::invalid_sample_interval,
         Error::invalid_duration,
+        Error::invalid_max_substeps,
+        Error::invalid_max_frame_delta,
+        Error::invalid_shape,
     };
     std::set<std::string_view> descriptions;
     for (const Error error : errors) {

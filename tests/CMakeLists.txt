@@ -1,5 +1,5 @@
-# Projectile test suite: unit tests, a header self-containment check, and package-consumption
-# tests. Catch2 is needed only here; the core library has no dependencies.
+# Projectile test suite: unit tests, integration tests, a header self-containment check, and
+# package-consumption tests. Catch2 is needed only here; the core library has no dependencies.
 
 # Build every target in this directory, including a fetched Catch2, as C++20. Catch2 detects
 # std::string_view support per translation unit, so the Catch2 library must be compiled with the
@@ -49,7 +49,9 @@ add_executable(
     unit/collision/test_collision_world.cpp
     unit/collision/test_intersection_properties.cpp
     unit/collision/test_plane_intersection.cpp
+    unit/collision/test_primitive_world.cpp
     unit/collision/test_sphere_intersection.cpp
+    unit/collision/test_sweep.cpp
     unit/collision/test_triangle_intersection.cpp
     unit/core/test_result.cpp
     unit/core/test_version.cpp
@@ -61,7 +63,9 @@ add_executable(
     unit/math/test_sphere.cpp
     unit/math/test_triangle.cpp
     unit/math/test_vec2.cpp
-    unit/math/test_vec3.cpp)
+    unit/math/test_vec3.cpp
+    unit/simulation/test_fixed_timestep.cpp
+    unit/simulation/test_simulation.cpp)
 target_link_libraries(projectile_unit_tests PRIVATE Projectile::Projectile Catch2::Catch2WithMain)
 # Test helpers in support/ are included as "support/<name>.hpp".
 target_include_directories(projectile_unit_tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
@@ -72,6 +76,24 @@ projectile_target_clang_tidy(projectile_unit_tests)
 # including CI, checks the same inputs; run the test binary with `--rng-seed random` to explore.
 # (One token: catch_discover_tests would merge a separate value into the same argument.)
 catch_discover_tests(projectile_unit_tests EXTRA_ARGS --rng-seed=20261105 PROPERTIES LABELS unit)
+
+# --------------------------------------------------------------------------------------------
+# Integration tests
+# --------------------------------------------------------------------------------------------
+
+# Complete simulation workflows. A separate program, because it replaces the global operator new
+# to count allocations (support/allocation_counter.cpp), which the unit tests do not need.
+add_executable(
+    projectile_integration_tests
+    integration/test_simulation_workflow.cpp
+    support/allocation_counter.cpp)
+target_link_libraries(
+    projectile_integration_tests PRIVATE Projectile::Projectile Catch2::Catch2WithMain)
+target_include_directories(projectile_integration_tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
+projectile_target_warnings(projectile_integration_tests)
+projectile_target_clang_tidy(projectile_integration_tests)
+catch_discover_tests(
+    projectile_integration_tests EXTRA_ARGS --rng-seed=20261105 PROPERTIES LABELS integration)
 
 # --------------------------------------------------------------------------------------------
 # Header self-containment

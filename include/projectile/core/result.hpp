@@ -28,6 +28,10 @@ enum class Error : std::uint8_t {
     invalid_time_step, ///< A time step is not finite, or not greater than zero.
     invalid_sample_interval, ///< A sample interval is not finite, or not greater than zero.
     invalid_duration,        ///< A duration is negative or not finite.
+    invalid_max_substeps,    ///< A maximum number of substeps is zero.
+    invalid_max_frame_delta, ///< A maximum frame delta is not finite, or shorter than the time
+                             ///< step.
+    invalid_shape,           ///< A geometric shape is not valid (see the is_valid() functions).
 };
 
 /// A short description of @p error in English, for logs and messages.
@@ -51,6 +55,12 @@ enum class Error : std::uint8_t {
         return "sample interval must be finite and greater than zero";
     case Error::invalid_duration:
         return "duration must be finite and zero or greater";
+    case Error::invalid_max_substeps:
+        return "maximum number of substeps must be at least 1";
+    case Error::invalid_max_frame_delta:
+        return "maximum frame delta must be finite and no shorter than the time step";
+    case Error::invalid_shape:
+        return "shape must be valid: finite, with unit normals and ordered box corners";
     }
     return "unknown error";
 }

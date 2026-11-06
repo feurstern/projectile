@@ -35,6 +35,9 @@ struct ProjectileConfig {
 
     /// How long the projectile exists, in s; greater than zero. Infinite by default.
     double lifetime = std::numeric_limits<double>::infinity();
+
+    /// Exact member-wise comparison.
+    constexpr bool operator==(const ProjectileConfig&) const = default;
 };
 
 /// Checks @p config and returns the first problem found, or `std::nullopt` if it is valid.

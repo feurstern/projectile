@@ -1,6 +1,6 @@
 #include "projectile/ballistics/trajectory.hpp"
 
-#include "projectile/collision/sweep.hpp"
+#include "ballistics/step_contact.hpp"
 
 #include <algorithm>
 #include <cstddef>
@@ -16,40 +16,6 @@ constexpr double same_time_fraction = 1e-9;
 
 /// Reserve memory up front only for predictions of up to this many samples.
 constexpr double max_reserved_samples = 1e6;
-
-/// The sample at fraction @p s of a step of duration @p duration (greater than zero) that starts
-/// at @p start_time in state @p from and ends in state @p to.
-///
-/// It lies on the cubic Hermite curve through both states' positions and velocities, which is
-/// exact for motion under constant acceleration.
-[[nodiscard]] TrajectorySample interpolate(
-    const ProjectileState& from,
-    const ProjectileState& to,
-    double start_time,
-    double duration,
-    double s
-) noexcept {
-    const double s2 = s * s;
-    const double s3 = s2 * s;
-    // Hermite basis: the weight of `to` (from's weight is 1 minus it), the weights of the two
-    // velocities, and the derivatives of all three with respect to s.
-    const double weight_to = 3.0 * s2 - 2.0 * s3;
-    const double weight_from_velocity = s3 - 2.0 * s2 + s;
-    const double weight_to_velocity = s3 - s2;
-    const double slope_to = 6.0 * s - 6.0 * s2;
-    const double slope_from_velocity = 3.0 * s2 - 4.0 * s + 1.0;
-    const double slope_to_velocity = 3.0 * s2 - 2.0 * s;
-
-    const Vec3 chord = to.position - from.position;
-    return TrajectorySample{
-        .time = start_time + s * duration,
-        .position =
-            from.position + chord * weight_to +
-            (from.velocity * weight_from_velocity + to.velocity * weight_to_velocity) * duration,
-        .velocity = chord * (slope_to / duration) + from.velocity * slope_from_velocity +
-                    to.velocity * slope_to_velocity,
-    };
-}
 
 /// Builds a predicted trajectory into a Trajectory, one integration step at a time.
 class Predictor {
@@ -129,7 +95,9 @@ private:
                 );
             } else {
                 out_->samples.push_back(
-                    interpolate(from, to, time, duration, (due_time() - time) / duration)
+                    detail::interpolate_step(
+                        from, to, time, duration, (due_time() - time) / duration
+                    )
                 );
             }
         }
@@ -143,26 +111,20 @@ private:
         if (world_ == nullptr || !(duration > 0.0)) {
             return false;
         }
-        const std::optional<HitResult> hit =
-            sweep_sphere(*world_, from.position, to.position, config_.radius);
-        if (!hit) {
+        const std::optional<detail::StepContact> contact =
+            detail::sweep_step(*world_, from, to, config_.radius);
+        if (!contact) {
             return false;
         }
-        // The collision query saw the straight line between the steps; the contact lies at this
-        // fraction of it.
-        const double length = distance(from.position, to.position);
-        const double fraction = length > 0.0 ? std::clamp(hit->distance / length, 0.0, 1.0) : 0.0;
-        const double hit_time = time + fraction * duration;
+        const double hit_time = time + contact->fraction * duration;
         for (; due_time() < hit_time - tolerance_; ++next_sample_) {
             out_->samples.push_back(
-                interpolate(from, to, time, duration, (due_time() - time) / duration)
+                detail::interpolate_step(from, to, time, duration, (due_time() - time) / duration)
             );
         }
-        TrajectorySample contact = interpolate(from, to, time, duration, fraction);
-        contact.position = lerp(from.position, to.position, fraction);
-        append(contact);
+        append(detail::contact_sample(from, to, time, duration, contact->fraction));
         out_->end = TrajectoryEnd::hit;
-        out_->hit = hit;
+        out_->hit = contact->hit;
         return true;
     }
 

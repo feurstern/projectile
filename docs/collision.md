@@ -1,12 +1,14 @@
 # Collision queries
 
 The collision module (`include/projectile/collision/`) answers one question: where does a ray, a
-segment or a moving sphere first touch a surface? It has two layers:
+segment or a moving sphere first touch a surface? It has three layers:
 
 - `intersect(query, shape)` tests a ray or a segment against a single plane, sphere,
   axis-aligned box or triangle.
+- `sweep_sphere(path, radius, shape)` tests a moving sphere against a single shape.
 - `ICollisionWorld` is the interface between Projectile and your game's geometry. You query it
-  through `raycast()` and `sweep_sphere()`.
+  through `raycast()` and `sweep_sphere()`. `PrimitiveWorld` is a ready-made world built from the
+  shapes above.
 
 All queries share the conventions below, so a hit means the same thing whichever shape or query
 produced it.
@@ -84,14 +86,57 @@ one-sided surfaces.
 - **Edges and corners.** Triangle edges and vertices belong to the triangle. At a box's edge or
   corner, the normal is that of one of the faces meeting there, preferring x over y over z.
 
+## Swept spheres
+
+A projectile with a radius is a sphere, and between two simulation steps its center moves along a
+segment. `sweep_sphere(path, radius, shape)` finds where such a sphere first touches a shape:
+
+```cpp
+const Segment path{.start = {-5.0, 0.0, 0.0}, .end = {5.0, 0.0, 0.0}};
+const AABB crate{.min = {-1.0, -1.0, -1.0}, .max = {1.0, 1.0, 1.0}};
+if (const std::optional<HitResult> hit = sweep_sphere(path, 0.5, crate)) {
+    // hit->distance == 3.5: the center stops half a metre before the face at x = -1.
+    // hit->point == {-1, 0, 0}, on the crate; hit->normal == {-1, 0, 0}.
+}
+```
+
+The sphere touches the shape exactly when its center comes within `radius` of it, so a sweep is
+a segment query of the center against the shape enlarged by the radius. For a sphere, that is a
+larger sphere. For a plane, it is a slab. For a box or a triangle it has rounded edges and
+corners, so a sphere sweeping past a corner touches it later than it would touch a box simply
+grown by the radius. The result describes the original shape:
+
+| Field | Meaning |
+|---|---|
+| `distance` | How far the center travels before the contact. |
+| `point` | The contact point on the shape's surface. |
+| `normal` | The unit normal at the contact, facing the side the sphere came from. At the edges and corners of boxes and triangles, it points from the contact to the sphere's center. |
+| `front_face` | As for segment queries: false for planes and triangles reached from behind, and for a shape the sphere already overlaps at the start. A contact on a triangle's rim counts as a front face unless the sphere's center is behind the triangle's plane. |
+
+How a sweep starts decides its result, for every shape:
+
+| At the start, the sphere | Moving into the shape | Moving away, or sliding along its surface |
+|---|---|---|
+| Is clear of the shape | Hit where it first touches; grazing the shape counts | No hit |
+| Touches the shape | Hit at distance 0 | No hit |
+| Overlaps the shape | Hit where it stops overlapping, a back face | Same |
+
+Planes and triangles, which are surfaces, behave like thin solids here: a sphere overlapping them
+is reported where it clears them on the far side. `Culling::back_faces` ignores those contacts,
+and contacts from behind.
+
+A radius of 0 gives exactly the segment query `intersect(path, shape)`, which keeps the
+segment's own rule for starting on a surface (a hit at distance 0). Paths of zero length and
+triangles of zero area never hit.
+
 ## Validation
 
-`intersect()` does not validate its arguments, so that it stays cheap in inner loops. Its results
-are meaningful only for valid input:
+`intersect()` and `sweep_sphere(path, radius, shape)` do not validate their arguments, so that
+they stay cheap in inner loops. Their results are meaningful only for valid input:
 
 - a valid ray (`is_valid(ray)`), or a segment with finite endpoints;
 - valid shapes (`is_valid(shape)`);
-- `max_distance ≥ 0`.
+- `max_distance ≥ 0`, and a finite `radius ≥ 0`.
 
 Validate data from outside your program once, with the `is_valid()` functions.
 
@@ -102,6 +147,37 @@ finite, or the radius is negative, NaN or infinite. World implementations can th
 valid input.
 
 ## Collision worlds
+
+A collision world holds the geometry that rays and projectiles can hit: the ground, walls,
+targets. Projectile includes one world, `PrimitiveWorld`, and works with any world you implement.
+
+### PrimitiveWorld
+
+`PrimitiveWorld` holds planes, spheres, boxes and triangles, each made of a material that hits on
+it report:
+
+```cpp
+PrimitiveWorld world;
+if (world.add(Plane{.normal = {0.0, 1.0, 0.0}, .distance = 0.0}, ground) ||
+    world.add(AABB{.min = {10.0, 0.0, -1.0}, .max = {10.01, 2.0, 1.0}}, steel)) {
+    // a shape was invalid: add() returned Error::invalid_shape and added nothing
+}
+
+const std::optional<HitResult> hit = raycast(world, ray, 1000.0); // hit->material_id
+```
+
+- Planes and triangles are two-sided.
+- When two shapes are hit at exactly the same distance, the one that comes first wins: planes,
+  then spheres, boxes and triangles, and within each kind the one added first.
+- Every query tests every shape, so its cost grows with the number of shapes. `PrimitiveWorld`
+  suits small scenes, tests and examples. For large scenes, implement `ICollisionWorld` on top
+  of a spatial index or your engine's physics, as described next.
+- Several threads may query a `PrimitiveWorld` at once, as long as no shapes are added
+  meanwhile.
+
+[examples/03_hitscan](../examples/03_hitscan/main.cpp) fires rays into one.
+
+### Your own world
 
 Projectile does not own your game's geometry. To run queries against it, implement
 `ICollisionWorld`:
@@ -194,8 +270,9 @@ private:
 //   auto hit = projectile::raycast(world, ray, 1000.0);
 ```
 
-Swept-sphere tests against every primitive, which a world of planes, boxes and triangles needs,
-are planned for Milestone 4.
+A world of other shapes can answer `sweep_sphere` with the library's sweeps:
+`projectile::sweep_sphere(Segment{.start = start, .end = end}, radius, shape)`. (Inside a class
+derived from `ICollisionWorld`, qualify the name: unqualified, it finds the member function.)
 
 ## Algorithms
 
@@ -212,6 +289,22 @@ Rays and segments share one implementation per shape. Each one works on the line
 | Sphere | Roots of `a s² + 2 b s + c = 0` | The discriminant comes from the distance between the center and the line, which stays accurate far from the origin; `b² − a c` cancels catastrophically there. The roots are rearranged so that nearly equal values are never subtracted. |
 | Box | Slab method: clip the line against the three pairs of faces | Divides by the direction components instead of multiplying by their reciprocals, which overflow for tiny components. Slabs parallel to the line are handled exactly. |
 | Triangle | Möller–Trumbore | The sign of the determinant tells the front face from the back face. Barycentric bounds are inclusive and reject NaN. |
+
+Swept spheres find the interval of the path's line inside the enlarged shape, then apply the rules
+above:
+
+| Shape | Enlarged shape | Method |
+|---|---|---|
+| Plane | Slab | Interpolates the endpoints' signed distances, like the segment query. |
+| Sphere | Sphere of the summed radii | The segment query, with the contact moved onto the original sphere. |
+| Box | Box with rounded edges and corners | The union of three boxes each grown along one axis, twelve cylinders around the edges and eight spheres at the corners. Each piece is convex and they overlap, so the line's interval is the hull of theirs. |
+| Triangle | Triangle thickened by the radius, with rounded edges and corners | The union of a prism over the triangle, three cylinders and three spheres. |
+
+Whether a sphere starts overlapping, touching or clear of a box or triangle is decided from the
+distance to its closest point (`closest_point()`), and the normal at the contact points from that
+closest point to the center. The tests check every sweep against the geometry directly, and
+compare box sweeps with sweeps against the twelve triangles of the box's surface: two
+independent computations of the same contact.
 
 **Known limitation.** The triangle test is not *watertight*. A ray passing exactly through an edge
 shared by two triangles can, through rounding, miss both. This is rare in practice; a watertight

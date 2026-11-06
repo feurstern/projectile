@@ -16,3 +16,5 @@ endfunction()
 
 projectile_add_example(01_basic_projectile)
 projectile_add_example(02_ballistic_drop)
+projectile_add_example(03_hitscan)
+projectile_add_example(04_swept_collision)

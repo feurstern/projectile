@@ -163,16 +163,18 @@ for (const TrajectorySample& sample : trajectory->samples) {
 }
 ```
 
-- **It repeats a simulation's steps.** With the simulation's `time_step` and `integrator`, a
-  preview shows exactly where the projectile will be, error included. Use `ballistic_position()`
-  and `ballistic_velocity()` for the exact physical path under constant acceleration.
+- **It repeats a simulation's steps.** With the `time_step` and `integrator` of the
+  `Simulation` (see [simulation.md](simulation.md)), a preview shows exactly where the projectile
+  will be, error included, and with the simulation's collision world it ends exactly where the
+  projectile will hit. Use `ballistic_position()` and `ballistic_velocity()` for the exact
+  physical path under constant acceleration.
 - **Samples fall every `sample_interval`**, from time 0 to where the prediction ended, which is
   always the last sample. No two samples share a time. Samples between steps lie on the cubic
   curve through the neighbouring steps' positions and velocities, which is exact under gravity
   alone.
 - **The prediction ends** at `max_duration`, when the projectile expires, or, if you pass a
   collision world, at the first contact. `Trajectory::end` says which.
-- **Collisions.** Like a simulation, each step sweeps a sphere of `config.radius` along the
+- **Collisions.** Like the simulation, each step sweeps a sphere of `config.radius` along the
   straight line between consecutive steps. At a contact:
   - `Trajectory::hit` holds the HitResult, whose `point` is on the surface that was hit;
   - the final sample is the projectile's center at that moment.

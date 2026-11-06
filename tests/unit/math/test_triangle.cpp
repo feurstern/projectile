@@ -3,6 +3,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include "support/math_matchers.hpp"
+#include "support/random.hpp"
 
 #include <limits>
 #include <type_traits>
@@ -38,4 +39,69 @@ TEST_CASE("is_valid requires finite vertices and accepts zero area", "[math][tri
     CHECK(is_valid(Triangle{.a = {}, .b = {1.0, 0.0, 0.0}, .c = {0.0, 1.0, 0.0}}));
     CHECK(is_valid(Triangle{.a = {}, .b = {1.0, 1.0, 1.0}, .c = {2.0, 2.0, 2.0}}));
     CHECK_FALSE(is_valid(Triangle{.a = {}, .b = {not_a_number, 0.0, 0.0}, .c = {}}));
+}
+
+TEST_CASE(
+    "closest_point finds the nearest point in every region of a triangle", "[math][triangle]"
+) {
+    constexpr Triangle triangle{.a = {0.0, 0.0, 0.0}, .b = {4.0, 0.0, 0.0}, .c = {0.0, 4.0, 0.0}};
+    // Above the face: the foot of the perpendicular, on either side.
+    STATIC_REQUIRE(closest_point(triangle, Vec3{1.0, 1.0, 5.0}) == Vec3{1.0, 1.0, 0.0});
+    STATIC_REQUIRE(closest_point(triangle, Vec3{1.0, 1.0, -5.0}) == Vec3{1.0, 1.0, 0.0});
+    // Beyond each vertex.
+    STATIC_REQUIRE(closest_point(triangle, Vec3{-1.0, -1.0, 2.0}) == triangle.a);
+    STATIC_REQUIRE(closest_point(triangle, Vec3{6.0, -1.0, 0.0}) == triangle.b);
+    STATIC_REQUIRE(closest_point(triangle, Vec3{-1.0, 6.0, 0.0}) == triangle.c);
+    // Beyond each edge.
+    STATIC_REQUIRE(closest_point(triangle, Vec3{2.0, -3.0, 1.0}) == Vec3{2.0, 0.0, 0.0});
+    STATIC_REQUIRE(closest_point(triangle, Vec3{-3.0, 2.0, 1.0}) == Vec3{0.0, 2.0, 0.0});
+    STATIC_REQUIRE(closest_point(triangle, Vec3{3.0, 3.0, 0.0}) == Vec3{2.0, 2.0, 0.0});
+}
+
+TEST_CASE("closest_point treats a triangle of zero area as its edges", "[math][triangle]") {
+    constexpr Triangle collinear{.a = {0.0, 0.0, 0.0}, .b = {1.0, 0.0, 0.0}, .c = {3.0, 0.0, 0.0}};
+    STATIC_REQUIRE(closest_point(collinear, Vec3{2.0, 5.0, 0.0}) == Vec3{2.0, 0.0, 0.0});
+    STATIC_REQUIRE(closest_point(collinear, Vec3{7.0, 1.0, 0.0}) == collinear.c);
+    constexpr Triangle point{.a = {1.0, 1.0, 1.0}, .b = {1.0, 1.0, 1.0}, .c = {1.0, 1.0, 1.0}};
+    STATIC_REQUIRE(closest_point(point, Vec3{}) == point.a);
+}
+
+TEST_CASE("no point of a triangle is closer than closest_point", "[math][triangle][property]") {
+    test::Random random;
+    for (int i = 0; i < 10'000; ++i) {
+        const Triangle triangle{
+            .a = random.vec3(-5.0, 5.0), .b = random.vec3(-5.0, 5.0), .c = random.vec3(-5.0, 5.0)
+        };
+        const Vec3 point = random.vec3(-10.0, 10.0);
+        const Vec3 closest = closest_point(triangle, point);
+        CAPTURE(triangle.a, triangle.b, triangle.c, point, closest);
+
+        // The result lies in the triangle: its barycentric coordinates are within [0, 1].
+        const Vec3 normal_direction = cross(triangle.b - triangle.a, triangle.c - triangle.a);
+        const double area_squared = length_squared(normal_direction);
+        if (area_squared < 1e-6) {
+            continue; // too thin for accurate barycentric coordinates
+        }
+        const double u =
+            dot(cross(triangle.c - triangle.b, closest - triangle.b), normal_direction) /
+            area_squared;
+        const double v =
+            dot(cross(triangle.a - triangle.c, closest - triangle.c), normal_direction) /
+            area_squared;
+        CHECK(u >= -1e-9);
+        CHECK(v >= -1e-9);
+        CHECK(u + v <= 1.0 + 1e-9);
+
+        // No sampled point of the triangle is closer.
+        const double best = distance(point, closest);
+        for (int j = 0; j <= 10; ++j) {
+            for (int k = 0; j + k <= 10; ++k) {
+                const double s = j / 10.0;
+                const double t = k / 10.0;
+                const Vec3 sample =
+                    triangle.a + (triangle.b - triangle.a) * s + (triangle.c - triangle.a) * t;
+                CHECK(distance(point, sample) >= best - 1e-9);
+            }
+        }
+    }
 }

@@ -39,7 +39,10 @@ Checks: >
   -readability-magic-numbers,
   -readability-math-missing-parentheses
 WarningsAsErrors: '*'
-HeaderFilterRegex: 'include/projectile/'
+# Public headers, and the library's internal headers in src/. Dependencies fetched into _deps/
+# are never analyzed.
+HeaderFilterRegex: '(include/projectile|src)/'
+ExcludeHeaderFilterRegex: '_deps/'
 FormatStyle: none
 CheckOptions:
   # Plain data structs (Vec3, HitResult, ...) intentionally expose public members.
