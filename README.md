@@ -6,14 +6,17 @@ collision, and configurable material interactions such as ricochet and penetrati
 only on the C++ standard library. It plugs into your engine through small interfaces instead
 of owning your scene.
 
-> **Status: pre-alpha, Milestone 3 of 7.** In place so far:
+> **Status: pre-alpha, Milestone 4 of 7.** In place so far:
 > - the build, packaging, test and CI foundation;
 > - the math module: vectors, rays, segments, planes, spheres, boxes and triangles;
-> - the collision module: ray and segment intersection, and the collision-world interface;
+> - the collision module: ray, segment and swept-sphere queries, the collision-world interface,
+>   and a ready-made world built from primitives;
 > - the ballistics module: projectiles under gravity, semi-implicit Euler and RK4 integration,
->   and trajectory prediction.
+>   and trajectory prediction;
+> - the simulation module: many projectiles at a fixed time step, with swept collisions,
+>   lifetimes and events.
 >
-> The simulation features marked as planned below are **not implemented yet**.
+> The features marked as planned below are **not implemented yet**.
 
 ## Feature roadmap
 
@@ -24,8 +27,8 @@ of owning your scene.
 | Hitscan queries | v0.1 | Done (Milestone 2) |
 | Projectile integration (semi-implicit Euler, RK4) | v0.1 | Done (Milestone 3) |
 | Gravity and trajectory prediction | v0.1 | Done (Milestone 3) |
-| Fixed-timestep simulation | v0.1 | Planned (Milestone 4) |
-| Swept sphere collision | v0.2 | Planned (Milestone 4) |
+| Fixed-timestep simulation | v0.1 | Done (Milestone 4) |
+| Swept sphere collision | v0.2 | Done (Milestone 4) |
 | Wind and aerodynamic drag | v0.2 | Planned (Milestone 5) |
 | Material interaction interface | v0.2 | Planned (Milestone 5) |
 | Ricochet and penetration | v0.3 | Planned (Milestone 5) |
@@ -38,8 +41,8 @@ real-world penetration models.
 
 ## Architecture
 
-The planned module layering is shown below. Arrows point from a module to the modules it uses.
-`core`, `math`, `collision` and `ballistics` exist today.
+The module layering is shown below. Arrows point from a module to the modules it uses. Every
+module except `materials` exists today; the adapter is planned.
 
 ```mermaid
 flowchart TD
@@ -237,6 +240,58 @@ int main() {
 See [docs/ballistics.md](docs/ballistics.md) for the integrators' accuracy and stability, custom
 forces, and trajectory prediction against a collision world.
 
+### Real-time simulation
+
+A `Simulation` advances many projectiles at a fixed time step, sweeps them through a collision
+world, and reports each flight's end:
+
+```cpp
+#include <projectile/projectile.hpp>
+
+#include <cstdio>
+
+using namespace projectile;
+
+int main() {
+    // A world to hit: the ground, and a 1 cm steel plate 50 m away (+y is up).
+    PrimitiveWorld world;
+    if (world.add(Plane{.normal = {0.0, 1.0, 0.0}, .distance = 0.0}, 1) ||
+        world.add(AABB{.min = {50.0, 0.0, -1.0}, .max = {50.01, 2.0, 1.0}}, 2)) {
+        return 1; // a shape was invalid
+    }
+
+    Simulation simulation; // fixed steps at 120 Hz
+    simulation.set_collision_world(&world);
+    simulation.set_event_callback([](const ProjectileEvent& event) {
+        if (event.hit) {
+            std::printf("hit material %u at x = %.3f m after %.4f s\n",
+                        event.hit->material_id, event.hit->point.x, event.time);
+        }
+    });
+
+    ProjectileConfig bullet;
+    bullet.radius = 0.005;
+    bullet.gravity = {0.0, -standard_gravity, 0.0};
+    for (const double speed : {300.0, 900.0}) {
+        const Result<ProjectileState> state =
+            create_projectile(bullet, {0.0, 1.5, 0.0}, {speed, 0.0, 0.0});
+        if (!state || !simulation.add_projectile(*state, bullet)) {
+            return 1;
+        }
+    }
+
+    // The game loop: one update per frame, with the time the frame took.
+    while (!simulation.projectiles().empty()) {
+        simulation.update(1.0 / 60.0);
+        // Draw each projectile at interpolated_position(projectile, simulation.interpolation_alpha()).
+    }
+}
+```
+
+At 900 m/s a bullet covers 7.5 m per step, yet it stops at the plate's surface: every step sweeps
+the projectile's whole path. See [docs/simulation.md](docs/simulation.md) for the fixed time step
+and its limits, projectile ids and events, drawing between steps, determinism and memory.
+
 ### Hitscan
 
 Rays and segments can be tested against the geometric primitives:
@@ -279,7 +334,8 @@ All quantities are in SI units, and angles are in radians. See
 [docs/collision.md](docs/collision.md) for the query conventions: what a hit reports, front and
 back faces, and boundary and degenerate cases. To query your game's own geometry, implement
 `ICollisionWorld` and call `raycast(world, ray, max_distance)`; `docs/collision.md` has a complete
-example.
+example. For a handful of shapes, the ready-made `PrimitiveWorld` does the job; see
+[examples/03_hitscan](examples/03_hitscan/main.cpp).
 
 ### Checking the library version
 
@@ -317,6 +373,8 @@ The programs in [examples/](examples/) are built with the project:
 |---|---|
 | [01_basic_projectile](examples/01_basic_projectile/main.cpp) | Creating a projectile and stepping it until it lands, printing its flight |
 | [02_ballistic_drop](examples/02_ballistic_drop/main.cpp) | Predicting a horizontal shot with both integrators, compared with the exact drop |
+| [03_hitscan](examples/03_hitscan/main.cpp) | Building a world of primitives with materials, firing rays into it, and computing ricochet directions |
+| [04_swept_collision](examples/04_swept_collision/main.cpp) | A simulation driven by uneven frame times, stopping bullets of up to 2,000 m/s at a 1 cm plate |
 
 Run them from the build directory, for example `build/dev/bin/02_ballistic_drop`.
 
@@ -327,6 +385,9 @@ Run them from the build directory, for example `build/dev/bin/02_ballistic_drop`
 - `unit`: Catch2 unit tests. These include property tests that check mathematical properties on
   10,000 random inputs each. CTest pins the random seed, so every run checks the same inputs; to
   explore other inputs, run `build/dev/bin/projectile_unit_tests "[property]" --rng-seed random`.
+- `integration`: complete simulation workflows. Hundreds of projectiles fly through a room, fast
+  projectiles meet thin shapes of every kind, repeated runs are compared bit for bit, and heap
+  allocations are counted.
 - `package`: installs the library into a staging prefix, then configures, builds and runs a
   small downstream project with `find_package(Projectile)` and with `add_subdirectory`. These
   take a few seconds; skip them with `ctest --preset dev -LE package`.
