@@ -89,3 +89,17 @@ TEST_CASE("contains includes the faces, edges and corners of the box", "[math][a
     STATIC_REQUIRE_FALSE(contains(box, Vec3{1.0, 1.0, 4.001}));
     CHECK_FALSE(contains(box, Vec3{not_a_number, 1.0, 1.0}));
 }
+
+TEST_CASE("closest_point clamps a point to the box", "[math][aabb]") {
+    constexpr AABB box{.min = {-1.0, -2.0, -3.0}, .max = {1.0, 2.0, 3.0}};
+    // Inside, or on the surface: the point itself.
+    STATIC_REQUIRE(closest_point(box, Vec3{0.5, -1.0, 2.0}) == Vec3{0.5, -1.0, 2.0});
+    STATIC_REQUIRE(closest_point(box, Vec3{1.0, 2.0, 3.0}) == Vec3{1.0, 2.0, 3.0});
+    // Outside a face, an edge and a corner.
+    STATIC_REQUIRE(closest_point(box, Vec3{5.0, 1.0, 0.0}) == Vec3{1.0, 1.0, 0.0});
+    STATIC_REQUIRE(closest_point(box, Vec3{5.0, -7.0, 0.0}) == Vec3{1.0, -2.0, 0.0});
+    STATIC_REQUIRE(closest_point(box, Vec3{-5.0, 7.0, 9.0}) == Vec3{-1.0, 2.0, 3.0});
+    // A flat box is a rectangle.
+    constexpr AABB flat{.min = {0.0, 0.0, 0.0}, .max = {2.0, 2.0, 0.0}};
+    STATIC_REQUIRE(closest_point(flat, Vec3{1.0, 1.0, -4.0}) == Vec3{1.0, 1.0, 0.0});
+}
