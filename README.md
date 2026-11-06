@@ -6,10 +6,12 @@ collision, and configurable material interactions such as ricochet and penetrati
 only on the C++ standard library. It plugs into your engine through small interfaces instead
 of owning your scene.
 
-> **Status: pre-alpha, Milestone 2 of 7.** In place so far:
+> **Status: pre-alpha, Milestone 3 of 7.** In place so far:
 > - the build, packaging, test and CI foundation;
 > - the math module: vectors, rays, segments, planes, spheres, boxes and triangles;
-> - the collision module: ray and segment intersection, and the collision-world interface.
+> - the collision module: ray and segment intersection, and the collision-world interface;
+> - the ballistics module: projectiles under gravity, semi-implicit Euler and RK4 integration,
+>   and trajectory prediction.
 >
 > The simulation features marked as planned below are **not implemented yet**.
 
@@ -20,8 +22,8 @@ of owning your scene.
 | Vector and mathematical utilities | v0.1 | Done (Milestone 1) |
 | Ray and geometric intersection | v0.1 | Done (Milestone 2) |
 | Hitscan queries | v0.1 | Done (Milestone 2) |
-| Projectile integration (semi-implicit Euler, RK4) | v0.1 | Planned (Milestone 3) |
-| Gravity and trajectory prediction | v0.1 | Planned (Milestone 3) |
+| Projectile integration (semi-implicit Euler, RK4) | v0.1 | Done (Milestone 3) |
+| Gravity and trajectory prediction | v0.1 | Done (Milestone 3) |
 | Fixed-timestep simulation | v0.1 | Planned (Milestone 4) |
 | Swept sphere collision | v0.2 | Planned (Milestone 4) |
 | Wind and aerodynamic drag | v0.2 | Planned (Milestone 5) |
@@ -37,7 +39,7 @@ real-world penetration models.
 ## Architecture
 
 The planned module layering is shown below. Arrows point from a module to the modules it uses.
-`core`, `math` and `collision` exist today.
+`core`, `math`, `collision` and `ballistics` exist today.
 
 ```mermaid
 flowchart TD
@@ -92,12 +94,12 @@ clang-tidy run and a clang-format check.
 ```sh
 export CMAKE_GENERATOR=Ninja   # optional; omit it to use CMake's default generator
 
-cmake --preset dev             # configure: Debug, tests, warnings as errors
+cmake --preset dev             # configure: Debug, tests, examples, warnings as errors
 cmake --build --preset dev     # build
 ctest --preset dev             # run the tests
 ```
 
-| Preset | Build type | Tests | Notes |
+| Preset | Build type | Tests and examples | Notes |
 |---|---|---|---|
 | `debug` | Debug | yes | |
 | `release` | Release | no | the library only |
@@ -121,6 +123,7 @@ ctest --test-dir build --output-on-failure
 | Option | Default | Description |
 |---|---|---|
 | `PROJECTILE_BUILD_TESTS` | ON at top level | Build the test suite. This fetches Catch2 3 if it is not installed. |
+| `PROJECTILE_BUILD_EXAMPLES` | ON at top level | Build the example programs in `examples/`. |
 | `PROJECTILE_INSTALL` | ON at top level | Generate install rules and the `find_package` package. |
 | `PROJECTILE_WARNINGS_AS_ERRORS` | OFF | Treat warnings in Projectile's own targets as errors. |
 | `PROJECTILE_ENABLE_CLANG_TIDY` | OFF | Run clang-tidy on Projectile's sources while building (Ninja and Makefile generators). |
@@ -190,8 +193,53 @@ set_target_properties(my_game PROPERTIES CXX_SCAN_FOR_MODULES OFF)
 
 ### Quick start
 
-The projectile simulation API arrives with Milestone 3. Today you can run hitscan queries
-against the geometric primitives:
+Describe a projectile, create it, and advance it at a fixed time step:
+
+```cpp
+#include <projectile/projectile.hpp>
+
+#include <cstdio>
+
+using namespace projectile;
+
+int main() {
+    ProjectileConfig config;
+    config.mass = 0.01;                             // kg
+    config.radius = 0.005;                          // m
+    config.initial_velocity = {0.0, 30.0, 0.0};     // m/s
+    config.gravity = {0.0, -standard_gravity, 0.0}; // no built-in "up": +y is up here
+
+    const Result<ProjectileState> created = create_projectile(config, {0.0, 10.0, 0.0});
+    if (!created) {
+        return 1; // describe(created.error()) says what is wrong
+    }
+    ProjectileState state = *created;
+
+    // Advance one second at 120 Hz.
+    const SemiImplicitEuler integrator;
+    for (int i = 0; i < 120; ++i) {
+        integrator.step(state, config, 1.0 / 120.0);
+    }
+    std::printf("after 1 s: height %.2f m, vertical speed %.2f m/s\n", state.position.y, state.velocity.y);
+
+    // Preview the next 5 s, stepping exactly as the loop above does.
+    TrajectoryConfig preview;
+    preview.sample_interval = 0.5;
+    preview.max_duration = 5.0;
+    if (const Result<Trajectory> trajectory = predict_trajectory(state, config, preview)) {
+        for (const TrajectorySample& sample : trajectory->samples) {
+            std::printf("t = %.1f s: height %.2f m\n", sample.time, sample.position.y);
+        }
+    }
+}
+```
+
+See [docs/ballistics.md](docs/ballistics.md) for the integrators' accuracy and stability, custom
+forces, and trajectory prediction against a collision world.
+
+### Hitscan
+
+Rays and segments can be tested against the geometric primitives:
 
 ```cpp
 #include <projectile/projectile.hpp>
@@ -261,6 +309,17 @@ int main() {
 }
 ```
 
+## Examples
+
+The programs in [examples/](examples/) are built with the project:
+
+| Example | Shows |
+|---|---|
+| [01_basic_projectile](examples/01_basic_projectile/main.cpp) | Creating a projectile and stepping it until it lands, printing its flight |
+| [02_ballistic_drop](examples/02_ballistic_drop/main.cpp) | Predicting a horizontal shot with both integrators, compared with the exact drop |
+
+Run them from the build directory, for example `build/dev/bin/02_ballistic_drop`.
+
 ## Tests
 
 `ctest --preset dev` runs the whole suite. Tests carry labels:
@@ -271,6 +330,7 @@ int main() {
 - `package`: installs the library into a staging prefix, then configures, builds and runs a
   small downstream project with `find_package(Projectile)` and with `add_subdirectory`. These
   take a few seconds; skip them with `ctest --preset dev -LE package`.
+- `example`: runs each example program, which must complete successfully.
 
 During the build, every public header is also compiled on its own, which proves that each
 header is self-contained.
