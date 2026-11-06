@@ -76,14 +76,19 @@ add_library(
     projectile
     src/ballistics/trajectory.cpp
     src/collision/intersection.cpp
-    src/core/version.cpp)
+    src/collision/primitive_world.cpp
+    src/collision/sweep.cpp
+    src/core/version.cpp
+    src/simulation/simulation.cpp)
 add_library(Projectile::Projectile ALIAS projectile)
 
 target_compile_features(projectile PUBLIC cxx_std_20)
+# Headers internal to the library live in src/ and are included as "<module>/<name>.hpp".
 target_include_directories(
     projectile
     PUBLIC "$<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>"
-           "$<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>")
+           "$<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>"
+    PRIVATE "${PROJECT_SOURCE_DIR}/src")
 
 set_target_properties(
     projectile
