@@ -6,12 +6,19 @@
 /// Including individual headers instead keeps compile times down; this header is a
 /// convenience for applications and examples.
 
+#include "projectile/ballistics/forces.hpp"
+#include "projectile/ballistics/integrator.hpp"
+#include "projectile/ballistics/projectile_config.hpp"
+#include "projectile/ballistics/projectile_state.hpp"
+#include "projectile/ballistics/trajectory.hpp"
 #include "projectile/collision/collision_world.hpp"
 #include "projectile/collision/hit_result.hpp"
 #include "projectile/collision/intersection.hpp"
 #include "projectile/collision/raycast.hpp"
 #include "projectile/collision/sweep.hpp"
+#include "projectile/core/constants.hpp"
 #include "projectile/core/export.hpp"
+#include "projectile/core/result.hpp"
 #include "projectile/core/version.hpp"
 #include "projectile/math/aabb.hpp"
 #include "projectile/math/math_utils.hpp"

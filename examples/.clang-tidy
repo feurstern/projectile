@@ -1,0 +1,10 @@
+---
+# Example programs follow the project configuration, with two exceptions suited to small demos:
+#
+#   cppcoreguidelines-pro-type-vararg  the examples print tables with printf, which reads far
+#                                      more clearly than iostream manipulators
+#   bugprone-exception-escape          an exception escaping an example's main simply ends it
+InheritParentConfig: true
+Checks: >
+  -bugprone-exception-escape,
+  -cppcoreguidelines-pro-type-vararg

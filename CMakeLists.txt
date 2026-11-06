@@ -49,9 +49,10 @@ endif()
 # Options
 # --------------------------------------------------------------------------------------------
 
-# Tests and install rules default to ON only for top-level builds, so projects that embed
-# Projectile do not download test dependencies or install Projectile by accident.
+# Tests, examples and install rules default to ON only for top-level builds, so projects that
+# embed Projectile do not download test dependencies or install Projectile by accident.
 option(PROJECTILE_BUILD_TESTS "Build the Projectile test suite" ${PROJECTILE_IS_TOP_LEVEL})
+option(PROJECTILE_BUILD_EXAMPLES "Build the example programs" ${PROJECTILE_IS_TOP_LEVEL})
 option(PROJECTILE_INSTALL "Generate Projectile's install and package-config rules"
        ${PROJECTILE_IS_TOP_LEVEL})
 option(PROJECTILE_WARNINGS_AS_ERRORS "Treat compiler warnings in Projectile targets as errors" OFF)
@@ -71,7 +72,11 @@ set(CMAKE_CXX_SCAN_FOR_MODULES OFF)
 # Core library
 # --------------------------------------------------------------------------------------------
 
-add_library(projectile src/collision/intersection.cpp src/core/version.cpp)
+add_library(
+    projectile
+    src/ballistics/trajectory.cpp
+    src/collision/intersection.cpp
+    src/core/version.cpp)
 add_library(Projectile::Projectile ALIAS projectile)
 
 target_compile_features(projectile PUBLIC cxx_std_20)
@@ -150,4 +155,13 @@ endif()
 if(PROJECTILE_BUILD_TESTS)
     enable_testing()
     add_subdirectory(tests)
+endif()
+
+# --------------------------------------------------------------------------------------------
+# Examples
+# --------------------------------------------------------------------------------------------
+
+# With tests enabled, every example also runs as a test (label "example").
+if(PROJECTILE_BUILD_EXAMPLES)
+    add_subdirectory(examples)
 endif()
