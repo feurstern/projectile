@@ -6,9 +6,12 @@
 // - repeated runs reproduce their results exactly;
 // - memory stops growing once a simulation reaches its largest size.
 
+#include "projectile/ballistics/energy.hpp"
 #include "projectile/ballistics/trajectory.hpp"
 #include "projectile/collision/primitive_world.hpp"
 #include "projectile/core/constants.hpp"
+#include "projectile/materials/interaction.hpp"
+#include "projectile/materials/material.hpp"
 #include "projectile/math/math_utils.hpp"
 #include "projectile/simulation/simulation.hpp"
 
@@ -124,7 +127,8 @@ std::vector<Launch> random_launches(const Room& room, std::size_t count) {
         if (!room.clear(position, config.radius + 0.01, 0.0)) {
             continue;
         }
-        const Vec3 velocity = random.unit_vec3() * random.uniform(5.0, 800.0);
+        const Vec3 direction = random.unit_vec3();
+        const Vec3 velocity = direction * random.uniform(5.0, 800.0);
         launches.push_back(
             {.state = require_value(create_projectile(config, position, velocity)),
              .config = config}
@@ -141,17 +145,21 @@ struct Outcome {
 };
 
 /// Simulates @p launches in @p room with @p config until every flight ends, advancing with
-/// frames from @p next_frame.
+/// frames from @p next_frame. Impacts follow @p interaction and @p materials, if given.
 template <typename NextFrame>
 Outcome run(
     const Room& room,
     const std::vector<Launch>& launches,
     const SimulationConfig& config,
-    NextFrame next_frame
+    NextFrame next_frame,
+    const IMaterialInteraction* interaction = nullptr,
+    const MaterialTable* materials = nullptr
 ) {
     Outcome outcome;
     Simulation simulation = require_value(Simulation::create(config));
     simulation.set_collision_world(&room.world);
+    simulation.set_interaction(interaction);
+    simulation.set_materials(materials);
     simulation.set_event_callback([&outcome](const ProjectileEvent& event) {
         outcome.events.push_back(event);
     });
@@ -213,6 +221,95 @@ TEST_CASE(
     }
     CHECK(hits > 250);
     CHECK(thin_wall_hits > 0);
+}
+
+// --- Materials ----------------------------------------------------------------------------------
+
+namespace {
+
+/// Materials for the room. Its walls make shallow shots ricochet; the thin wall and the ramp
+/// can be shot through; the block and the ball are impenetrable and bounce projectiles off.
+MaterialTable room_materials() {
+    MaterialTable table;
+    Material walls;
+    walls.id = 1;
+    walls.restitution = 0.5;
+    walls.friction = 0.2;
+    walls.ricochet_angle = degrees_to_radians(30.0);
+    Material thin_wall;
+    thin_wall.id = 2;
+    thin_wall.penetration_cost = 20.0;
+    thin_wall.resistance = 1e4; // a 1 cm wall costs 120 J in all
+    thin_wall.restitution = 0.3;
+    thin_wall.ricochet_angle = degrees_to_radians(10.0);
+    Material block;
+    block.id = 3;
+    block.restitution = 0.4;
+    block.friction = 0.3;
+    block.ricochet_angle = degrees_to_radians(20.0);
+    Material ball;
+    ball.id = 4;
+    ball.restitution = 0.8;
+    ball.ricochet_angle = degrees_to_radians(50.0);
+    Material ramp;
+    ramp.id = 5;
+    ramp.penetration_cost = 5.0;
+    for (const Material& material : {walls, thin_wall, block, ball, ramp}) {
+        REQUIRE_FALSE(table.add(material));
+    }
+    return table;
+}
+
+} // namespace
+
+TEST_CASE(
+    "projectiles ricochet and penetrate without ever gaining energy",
+    "[integration][simulation][impacts]"
+) {
+    const Room room;
+    const MaterialTable materials = room_materials();
+    const StandardInteraction interaction;
+    const std::vector<Launch> launches = random_launches(room, 300);
+    const auto frame = [] { return 1.0 / 60.0; };
+    const Outcome outcome =
+        run(room, launches, SimulationConfig{}, frame, &interaction, &materials);
+
+    // No projectile ever ended a step outside the room or inside an obstacle, even after
+    // ricocheting or passing through one.
+    CHECK(outcome.violations == 0);
+    std::size_t ended = 0;
+    std::size_t ricochets = 0;
+    std::size_t penetrations = 0;
+    for (const ProjectileEvent& event : outcome.events) {
+        CAPTURE(event);
+        switch (event.kind) {
+        case ProjectileEventKind::hit:
+        case ProjectileEventKind::expired:
+            ++ended;
+            break;
+        case ProjectileEventKind::ricochet:
+            ++ricochets;
+            break;
+        case ProjectileEventKind::penetration:
+            ++penetrations;
+            break;
+        }
+        if (event.interaction) {
+            // Impacts take energy and speed away; they never add any.
+            const InteractionResult& result = *event.interaction;
+            CHECK(
+                result.energy_remaining <= kinetic_energy(event.state, event.config) * (1.0 + 1e-12)
+            );
+            CHECK(length(result.outgoing_velocity) <= length(event.state.velocity) * (1.0 + 1e-12));
+        }
+    }
+    CHECK(ended == launches.size()); // every flight ended, once
+    CHECK(ricochets > 30);
+    CHECK(penetrations > 0);
+
+    // And the run is reproducible, impacts included.
+    const Outcome again = run(room, launches, SimulationConfig{}, frame, &interaction, &materials);
+    CHECK(again.events == outcome.events);
 }
 
 // --- Tunneling ----------------------------------------------------------------------------------
