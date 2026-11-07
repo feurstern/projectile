@@ -6,15 +6,17 @@ collision, and configurable material interactions such as ricochet and penetrati
 only on the C++ standard library. It plugs into your engine through small interfaces instead
 of owning your scene.
 
-> **Status: pre-alpha, Milestone 4 of 7.** In place so far:
+> **Status: pre-alpha, Milestone 5 of 7.** In place so far:
 > - the build, packaging, test and CI foundation;
 > - the math module: vectors, rays, segments, planes, spheres, boxes and triangles;
 > - the collision module: ray, segment and swept-sphere queries, the collision-world interface,
 >   and a ready-made world built from primitives;
-> - the ballistics module: projectiles under gravity, semi-implicit Euler and RK4 integration,
->   and trajectory prediction;
+> - the ballistics module: projectiles under gravity, air drag and wind, semi-implicit Euler and
+>   RK4 integration, and trajectory prediction;
+> - the materials module: materials, and a replaceable interaction model for ricochet,
+>   penetration and energy loss;
 > - the simulation module: many projectiles at a fixed time step, with swept collisions,
->   lifetimes and events.
+>   impacts, lifetimes and events.
 >
 > The features marked as planned below are **not implemented yet**.
 
@@ -29,9 +31,9 @@ of owning your scene.
 | Gravity and trajectory prediction | v0.1 | Done (Milestone 3) |
 | Fixed-timestep simulation | v0.1 | Done (Milestone 4) |
 | Swept sphere collision | v0.2 | Done (Milestone 4) |
-| Wind and aerodynamic drag | v0.2 | Planned (Milestone 5) |
-| Material interaction interface | v0.2 | Planned (Milestone 5) |
-| Ricochet and penetration | v0.3 | Planned (Milestone 5) |
+| Wind and aerodynamic drag | v0.2 | Done (Milestone 5) |
+| Material interaction interface | v0.2 | Done (Milestone 5) |
+| Ricochet and penetration | v0.3 | Done (Milestone 5) |
 | raylib visualization adapter and demos | v0.3 | Planned (Milestone 6) |
 | Benchmark suite | v0.3 | Planned (Milestone 6) |
 | Single-header distribution | v1.0 | Optional |
@@ -42,7 +44,7 @@ real-world penetration models.
 ## Architecture
 
 The module layering is shown below. Arrows point from a module to the modules it uses. Every
-module except `materials` exists today; the adapter is planned.
+module of the core library exists today; the raylib adapter is planned.
 
 ```mermaid
 flowchart TD
@@ -270,6 +272,7 @@ int main() {
     });
 
     ProjectileConfig bullet;
+    bullet.mass = 0.01; // kg
     bullet.radius = 0.005;
     bullet.gravity = {0.0, -standard_gravity, 0.0};
     for (const double speed : {300.0, 900.0}) {
@@ -291,6 +294,33 @@ int main() {
 At 900 m/s a bullet covers 7.5 m per step, yet it stops at the plate's surface: every step sweeps
 the projectile's whole path. See [docs/simulation.md](docs/simulation.md) for the fixed time step
 and its limits, projectile ids and events, drawing between steps, determinism and memory.
+
+### Materials, ricochet and penetration
+
+Give surfaces materials, and let an interaction model decide each impact. In the example above,
+make the plate steel that shallow shots ricochet off:
+
+```cpp
+Material steel;
+steel.id = 2;                                     // the plate's material id
+steel.ricochet_angle = degrees_to_radians(25.0);  // shallower shots ricochet...
+steel.restitution = 0.6;                          // ...keeping 60 % of the speed into the plate
+steel.penetration_cost = 5'000.0;                 // J; steeper shots need this much to go through
+
+MaterialTable materials;
+const StandardInteraction interaction;
+if (materials.add(steel)) {
+    return 1; // an invalid material
+}
+simulation.set_materials(&materials);
+simulation.set_interaction(&interaction);
+```
+
+Events then report `ricochet` and `penetration` impacts, with the energy before and after, as well
+as hits that stop projectiles. The material values are gameplay settings, not physical constants.
+For air resistance and wind, set `drag_coefficient`, `reference_area` and `wind` in the
+`ProjectileConfig`. See [docs/materials.md](docs/materials.md) for the interaction model and its
+assumptions, and [docs/ballistics.md](docs/ballistics.md) for drag.
 
 ### Hitscan
 
@@ -375,6 +405,7 @@ The programs in [examples/](examples/) are built with the project:
 | [02_ballistic_drop](examples/02_ballistic_drop/main.cpp) | Predicting a horizontal shot with both integrators, compared with the exact drop |
 | [03_hitscan](examples/03_hitscan/main.cpp) | Building a world of primitives with materials, firing rays into it, and computing ricochet directions |
 | [04_swept_collision](examples/04_swept_collision/main.cpp) | A simulation driven by uneven frame times, stopping bullets of up to 2,000 m/s at a 1 cm plate |
+| [05_material_interaction](examples/05_material_interaction/main.cpp) | Bullets with drag and wind shot into wood, steel, concrete and dirt: ricochets, penetrations and stops, with the energy each costs |
 
 Run them from the build directory, for example `build/dev/bin/02_ballistic_drop`.
 
