@@ -52,7 +52,7 @@ To fix formatting, run the last command with `-i` in place of `--dry-run --Werro
 | `tests/support/` | Shared test helpers: value printers, tolerance matchers, the seeded random generator, an allocation counter. |
 | `tests/package/` | Downstream projects that test installation and embedding. |
 | `examples/` | Example programs, one directory each, run as tests. |
-| `docs/` | Technical documentation: the [mathematical conventions](docs/mathematics.md), the [collision query conventions](docs/collision.md), the [ballistics](docs/ballistics.md) and the [simulation](docs/simulation.md). |
+| `docs/` | Technical documentation: the [mathematical conventions](docs/mathematics.md), the [collision query conventions](docs/collision.md), the [ballistics](docs/ballistics.md), the [simulation](docs/simulation.md) and the [material interactions](docs/materials.md). |
 | `cmake/` | CMake modules: compiler options, version parsing, the package template. |
 | `.github/workflows/` | CI, sanitizer and release workflows. |
 
@@ -144,6 +144,10 @@ The full conventions are in [docs/mathematics.md](docs/mathematics.md). In short
   - To explore other inputs, run the test binary with `--rng-seed random`.
   - Skip inputs that are ill-conditioned for the property under test, and explain why in a
     comment.
+  - Make at most one draw per function call. The order in which a call's arguments are evaluated
+    is unspecified, so `f(random.vec3(...), random.vec3(...))` draws in a different order on
+    different compilers. Draw into named variables first; braced initializers such as
+    `Vec3{random.uniform(...), ...}` are evaluated left to right.
 - Keep tolerances valid when the compiler fuses multiply-adds (Clang does on ARM64): compare
   exactly only where the arithmetic is exact.
 - Compare points inside a segment within a tolerance. They come from `std::lerp`, whose rounding
