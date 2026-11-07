@@ -120,8 +120,8 @@ TEST_CASE("closest_point projects a point onto the plane", "[math][plane]") {
 TEST_CASE("closest_point lies on the plane, straight along the normal", "[math][plane][property]") {
     projectile::test::Random random;
     for (int i = 0; i < 10'000; ++i) {
-        const Plane plane =
-            require_value(make_plane(random.vec3(-1.0, 1.0), random.vec3(-100.0, 100.0)));
+        const Vec3 normal = random.vec3(-1.0, 1.0);
+        const Plane plane = require_value(make_plane(normal, random.vec3(-100.0, 100.0)));
         const Vec3 point = random.vec3(-100.0, 100.0);
         const Vec3 closest = closest_point(plane, point);
         CAPTURE(plane, point);

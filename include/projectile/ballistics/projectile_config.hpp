@@ -3,6 +3,7 @@
 /// @file
 /// @brief The parameters of a projectile.
 
+#include "projectile/core/constants.hpp"
 #include "projectile/core/result.hpp"
 #include "projectile/math/vec3.hpp"
 
@@ -17,9 +18,12 @@ namespace projectile {
 /// A projectile is described by two parts. ProjectileConfig holds what it is and the world it
 /// moves in; ProjectileState holds where it is and how it moves, and changes every step. Many
 /// projectiles can share one configuration.
+///
+/// By default a projectile feels gravity only. Setting a drag coefficient and a reference area
+/// adds air resistance, which also makes it drift with the wind; see docs/ballistics.md.
 struct ProjectileConfig {
     /// Mass in kg; finite and greater than zero. Gravity alone accelerates every mass equally;
-    /// the mass matters to features that depend on it, such as drag and impact energy.
+    /// the mass matters to drag and to impact energy.
     double mass = 1.0;
 
     /// Radius in m; zero or greater. Collision queries sweep a sphere of this radius, and a
@@ -35,6 +39,22 @@ struct ProjectileConfig {
 
     /// How long the projectile exists, in s; greater than zero. Infinite by default.
     double lifetime = std::numeric_limits<double>::infinity();
+
+    /// Drag coefficient `C_d` (dimensionless); finite and zero or greater. Zero, the default,
+    /// turns air resistance off. Typical values: about 0.47 for a sphere, 0.2 to 0.4 for bullets.
+    double drag_coefficient = 0.0;
+
+    /// Reference area `A` in m² that drag acts on, usually the frontal cross-section; finite and
+    /// zero or greater, and greater than zero when `drag_coefficient` is. For a sphere of radius
+    /// `r`, `π · r²`.
+    double reference_area = 0.0;
+
+    /// Density `ρ` of the air in kg/m³; finite and zero or greater. Sea level by default.
+    double air_density = standard_air_density;
+
+    /// Velocity of the air in m/s. Drag acts on the projectile's velocity relative to the air,
+    /// so wind matters only when there is drag.
+    Vec3 wind;
 
     /// Exact member-wise comparison.
     constexpr bool operator==(const ProjectileConfig&) const = default;
@@ -56,6 +76,19 @@ struct ProjectileConfig {
     }
     if (!(config.lifetime > 0.0)) { // rejects NaN; infinity is allowed
         return Error::invalid_lifetime;
+    }
+    if (!std::isfinite(config.drag_coefficient) || config.drag_coefficient < 0.0) {
+        return Error::invalid_drag_coefficient;
+    }
+    if (!std::isfinite(config.reference_area) || config.reference_area < 0.0 ||
+        (config.drag_coefficient > 0.0 && config.reference_area == 0.0)) {
+        return Error::invalid_reference_area;
+    }
+    if (!std::isfinite(config.air_density) || config.air_density < 0.0) {
+        return Error::invalid_air_density;
+    }
+    if (!is_finite(config.wind)) {
+        return Error::invalid_wind;
     }
     return std::nullopt;
 }

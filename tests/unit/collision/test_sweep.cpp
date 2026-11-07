@@ -368,10 +368,14 @@ TEST_CASE("contact normals have no components of negative zero", "[collision][sw
 TEST_CASE("a sweep with radius zero is a segment query", "[collision][sweep][property]") {
     test::Random random;
     for (int i = 0; i < 10'000; ++i) {
-        const Segment segment = path(random.vec3(-10.0, 10.0), random.vec3(-10.0, 10.0));
-        const Plane plane = require_value(make_plane(random.unit_vec3(), random.vec3(-5.0, 5.0)));
+        // One draw per statement where the draws are function arguments, whose order of
+        // evaluation is unspecified; braced initializers are evaluated in order.
+        const Segment segment{.start = random.vec3(-10.0, 10.0), .end = random.vec3(-10.0, 10.0)};
+        const Vec3 normal = random.unit_vec3();
+        const Plane plane = require_value(make_plane(normal, random.vec3(-5.0, 5.0)));
         const Sphere sphere{.center = random.vec3(-5.0, 5.0), .radius = random.uniform(0.0, 3.0)};
-        const AABB box = require_value(make_aabb(random.vec3(-5.0, 5.0), random.vec3(-5.0, 5.0)));
+        const Vec3 corner = random.vec3(-5.0, 5.0);
+        const AABB box = require_value(make_aabb(corner, random.vec3(-5.0, 5.0)));
         const Triangle triangle{
             .a = random.vec3(-5.0, 5.0), .b = random.vec3(-5.0, 5.0), .c = random.vec3(-5.0, 5.0)
         };
@@ -440,7 +444,8 @@ TEST_CASE(
         const Segment segment = path(start, random.vec3(-3.0, 3.0) * 2.0 - start * 0.2);
         const double radius = random.uniform(0.01, 2.0);
 
-        const Plane plane = require_value(make_plane(random.unit_vec3(), random.vec3(-3.0, 3.0)));
+        const Vec3 normal = random.unit_vec3();
+        const Plane plane = require_value(make_plane(normal, random.vec3(-3.0, 3.0)));
         check_sweep(segment, radius, plane, sweep_sphere(segment, radius, plane));
         const Sphere sphere{.center = random.vec3(-3.0, 3.0), .radius = random.uniform(0.0, 2.0)};
         check_sweep(segment, radius, sphere, sweep_sphere(segment, radius, sphere));
@@ -511,10 +516,12 @@ TEST_CASE(
 ) {
     test::Random random;
     for (int i = 0; i < 10'000; ++i) {
-        const Segment segment = path(random.vec3(-6.0, 6.0), random.vec3(-6.0, 6.0));
+        const Segment segment{.start = random.vec3(-6.0, 6.0), .end = random.vec3(-6.0, 6.0)};
         const double radius = random.uniform(0.01, 2.0);
-        const Plane plane = require_value(make_plane(random.unit_vec3(), random.vec3(-2.0, 2.0)));
-        const AABB box = require_value(make_aabb(random.vec3(-3.0, 3.0), random.vec3(-3.0, 3.0)));
+        const Vec3 normal = random.unit_vec3();
+        const Plane plane = require_value(make_plane(normal, random.vec3(-2.0, 2.0)));
+        const Vec3 corner = random.vec3(-3.0, 3.0);
+        const AABB box = require_value(make_aabb(corner, random.vec3(-3.0, 3.0)));
         const Triangle triangle{
             .a = random.vec3(-4.0, 4.0), .b = random.vec3(-4.0, 4.0), .c = random.vec3(-4.0, 4.0)
         };

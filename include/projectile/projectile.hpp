@@ -6,6 +6,7 @@
 /// Including individual headers instead keeps compile times down; this header is a
 /// convenience for applications and examples.
 
+#include "projectile/ballistics/energy.hpp"
 #include "projectile/ballistics/forces.hpp"
 #include "projectile/ballistics/integrator.hpp"
 #include "projectile/ballistics/projectile_config.hpp"
@@ -21,6 +22,10 @@
 #include "projectile/core/export.hpp"
 #include "projectile/core/result.hpp"
 #include "projectile/core/version.hpp"
+#include "projectile/materials/interaction.hpp"
+#include "projectile/materials/material.hpp"
+#include "projectile/materials/penetration.hpp"
+#include "projectile/materials/ricochet.hpp"
 #include "projectile/math/aabb.hpp"
 #include "projectile/math/math_utils.hpp"
 #include "projectile/math/plane.hpp"

@@ -1,8 +1,9 @@
 # Ballistics
 
 The ballistics module (`include/projectile/ballistics/`) moves projectiles through time. It
-describes projectiles, the forces on them, the numerical integrators that advance them, and
-trajectory prediction. All quantities are in SI units (see [mathematics.md](mathematics.md)).
+describes projectiles, the forces on them (gravity, and optionally air drag and wind), the
+numerical integrators that advance them, kinetic energy, and trajectory prediction. All quantities
+are in SI units (see [mathematics.md](mathematics.md)).
 
 ## Describing a projectile
 
@@ -10,7 +11,7 @@ A projectile has two parts:
 
 | Part | Holds | Changes |
 |---|---|---|
-| `ProjectileConfig` | Mass, radius, initial velocity, gravity, lifetime | Never; many projectiles can share one |
+| `ProjectileConfig` | Mass, radius, initial velocity, gravity, lifetime, drag and wind | Never; many projectiles can share one |
 | `ProjectileState` | Position, velocity, acceleration, remaining lifetime, active flag | Every step |
 
 ```cpp
@@ -44,7 +45,7 @@ The integrators advance a projectile under an **acceleration field**: any callab
 The `AccelerationField` concept checks this signature.
 
 - **`forces_of(config)`** gives the forces Projectile applies, as a `ProjectileForces` field:
-  uniform gravity.
+  uniform gravity, and air drag when the configuration has it (see below).
 - **Your own field** models forces Projectile does not provide. Pass it to an integrator's
   `step(state, dt, field)`:
 
@@ -56,6 +57,78 @@ The `AccelerationField` concept checks this signature.
   ProjectileState projectile = *state;
   RungeKutta4{}.step(projectile, 1.0 / 120.0, field);
   ```
+
+## Drag and wind
+
+By default a projectile feels gravity only, which suits most games. For air resistance, set a drag
+coefficient and a reference area:
+
+```cpp
+ProjectileConfig bullet;
+bullet.mass = 0.008;                                                     // kg
+bullet.radius = 0.0045;                                                  // m
+bullet.gravity = {0.0, -standard_gravity, 0.0};
+bullet.drag_coefficient = 0.3;                                           // C_d
+bullet.reference_area = std::numbers::pi * bullet.radius * bullet.radius; // A, in m²
+bullet.wind = {0.0, 0.0, 2.0};                                           // m/s, a crosswind
+// bullet.air_density defaults to 1.225 kg/m³, sea level
+```
+
+Drag is the quadratic drag force of a body moving fast through air, against the velocity
+relative to the air:
+
+    F_d = −½ ρ C_d A |v − w| (v − w)
+
+where `ρ` is `air_density`, `C_d` is `drag_coefficient`, `A` is `reference_area` and `w` is
+`wind`. The acceleration is then
+
+    a = (m g + F_d) / m = g − k |v − w| (v − w),    k = ½ ρ C_d A / m
+
+`drag_factor(config)` gives `k`, in 1/m. For the 8 g bullet above it is 1.5 · 10⁻³ per metre: at
+800 m/s, drag decelerates it at about 940 m/s².
+
+| Setting | Default | Notes |
+|---|---|---|
+| `drag_coefficient` | 0 (no drag) | About 0.47 for a sphere, 0.2 to 0.4 for bullets. |
+| `reference_area` | 0 | Required, greater than zero, whenever `drag_coefficient` is: usually the frontal cross-section, `π r²` for a sphere. |
+| `air_density` | 1.225 kg/m³ | `standard_air_density`, sea level at 15 °C. Zero is a vacuum. |
+| `wind` | zero | Matters only with drag. |
+
+**What drag does:**
+
+- **It slows projectiles.** Without gravity, `dv/dt = −k v²` gives `v(t) = v₀ / (1 + k v₀ t)`.
+- **Falling projectiles reach a terminal velocity** `v_t = √(g / k)`, at which drag balances
+  gravity. Falling from rest, `v(t) = v_t tanh(g t / v_t)`.
+- **Wind carries projectiles along.** Drag acts on the velocity relative to the air, so a
+  projectile at rest in a wind accelerates until it moves with the air.
+- **It only takes energy away.** Without gravity, every step lowers the kinetic energy relative
+  to the air, and a projectile falling from rest never exceeds its terminal velocity.
+
+The tests check each of these against the exact solutions above, with both integrators.
+
+**Accuracy.** Drag depends on the velocity, so neither integrator is exact. The table measures
+one second of flight against `k = 0.5` per metre, from 10 m/s:
+
+| Steps per second | `SemiImplicitEuler` position error | `RungeKutta4` position error |
+|---|---|---|
+| 25 | 4.0 · 10⁻¹ m | 4.9 · 10⁻⁵ m |
+| 50 | 1.9 · 10⁻¹ m | 2.6 · 10⁻⁶ m |
+| 100 | 9.6 · 10⁻² m | 1.5 · 10⁻⁷ m |
+| 200 | 4.8 · 10⁻² m | 8.7 · 10⁻⁹ m |
+
+Halving the step halves Euler's error and divides RK4's by 16; the tests check both orders.
+
+**Stability.** Drag is strongest when the projectile moves fast through the air. Ignoring gravity,
+one `SemiImplicitEuler` step multiplies the speed relative to the air by `1 − k |v − w| · dt`, so
+the product `k |v − w| · dt` must stay below 1, or drag reverses the projectile within a step.
+Keep it well below 1 with either integrator. For bullets at 120 Hz it is around 0.01; very light,
+draggy objects at high speed need smaller steps.
+
+**Assumptions.** The model treats the projectile as a point with a constant drag coefficient: it
+ignores how `C_d` changes with speed (notably near the speed of sound), spin and lift (the Magnus
+effect), and tumbling. The air density and the wind are uniform and constant for each projectile,
+so changing them affects only projectiles created with the new values. For other forces, pass
+your own acceleration field to the integrators.
 
 ## Integrators
 
@@ -171,7 +244,7 @@ for (const TrajectorySample& sample : trajectory->samples) {
 - **Samples fall every `sample_interval`**, from time 0 to where the prediction ended, which is
   always the last sample. No two samples share a time. Samples between steps lie on the cubic
   curve through the neighbouring steps' positions and velocities, which is exact under gravity
-  alone.
+  alone, and accurate to third order with drag.
 - **The prediction ends** at `max_duration`, when the projectile expires, or, if you pass a
   collision world, at the first contact. `Trajectory::end` says which.
 - **Collisions.** Like the simulation, each step sweeps a sphere of `config.radius` along the
@@ -182,6 +255,9 @@ for (const TrajectorySample& sample : trajectory->samples) {
   `Trajectory&` refill it and reuse its memory.
 - **Invalid input is reported.** An invalid configuration or state yields the corresponding
   `Error` instead of a trajectory, and the output buffer is left untouched.
+
+Predictions stop at the first contact: they do not apply material interactions (see
+[materials.md](materials.md)).
 
 Predicting `max_duration / time_step` steps costs as much as simulating them. Samples take
 memory in proportion to `max_duration / sample_interval`.

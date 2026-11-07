@@ -79,6 +79,8 @@ add_library(
     src/collision/primitive_world.cpp
     src/collision/sweep.cpp
     src/core/version.cpp
+    src/materials/interaction.cpp
+    src/materials/material.cpp
     src/simulation/simulation.cpp)
 add_library(Projectile::Projectile ALIAS projectile)
 

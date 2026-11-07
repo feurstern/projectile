@@ -52,6 +52,18 @@ may contain breaking changes.
     takes, optionally stopping at the first hit in a collision world, and can reuse its output
     buffer. Also `ballistic_position` and `ballistic_velocity` for the exact motion under
     constant acceleration.
+  - Quadratic air drag and wind: `ProjectileConfig::drag_coefficient`, `reference_area`,
+    `air_density` (sea level by default) and `wind`, applied by `forces_of` and so by the
+    integrators, predictions and simulations. Off by default. Also `drag_factor`.
+  - `kinetic_energy` and `speed_for_energy`.
+- Materials module (`projectile/materials/`):
+  - `Material` (resistance, restitution, friction, penetration cost, ricochet angle) and
+    `MaterialTable`, which looks materials up by the ids collision worlds report.
+  - `IMaterialInteraction`, the replaceable interface that decides each impact, and
+    `StandardInteraction`: ricochet at shallow angles, penetration when the projectile's energy
+    covers the cost for the object's thickness, a stop otherwise. Its rules are also available
+    as `resolve_standard`.
+  - `impact_angle`, `ricochet_velocity` and `penetration_energy`.
 - Simulation module (`projectile/simulation/`):
   - `Simulation`: many projectiles advanced at a fixed time step, with stable `ProjectileId`s,
     swept collisions against an `ICollisionWorld`, lifetimes, hit and expiry events through an
@@ -59,15 +71,19 @@ may contain breaking changes.
     reproducible and independent of the frame rate, and a running simulation stops allocating
     once it reaches its largest size.
   - `SimulationConfig`: the time step (120 Hz by default), the most steps per update, the most
-    time owed, and the integrator.
+    time owed, the integrator, and the most impacts per projectile per step.
+  - Impacts decided by an interaction model with a material table (`set_interaction`,
+    `set_materials`): projectiles that ricochet or penetrate fly on for the rest of the step, and
+    `ricochet` and `penetration` events report the outgoing velocity and the remaining energy.
   - `FixedTimestep`: the accumulator that turns frame times into fixed steps, usable on its own.
 - Core: the `Error` codes and `Result<T>` type used to reject invalid configuration, and the
-  `standard_gravity` constant.
-- Examples `01_basic_projectile`, `02_ballistic_drop`, `03_hitscan` and `04_swept_collision`,
-  built by default (`PROJECTILE_BUILD_EXAMPLES`) and run as tests.
+  `standard_gravity` and `standard_air_density` constants.
+- Examples `01_basic_projectile`, `02_ballistic_drop`, `03_hitscan`, `04_swept_collision` and
+  `05_material_interaction`, built by default (`PROJECTILE_BUILD_EXAMPLES`) and run as tests.
 - Documentation of the numerical conventions in `docs/mathematics.md`, of the collision query
   conventions in `docs/collision.md`, of the integrators' accuracy and stability in
-  `docs/ballistics.md`, and of the simulation in `docs/simulation.md`.
+  `docs/ballistics.md`, of the simulation in `docs/simulation.md`, and of material interactions
+  and their assumptions in `docs/materials.md`.
 - Test suite built on Catch2 v3:
   - unit tests;
   - integration tests of complete simulation workflows, including tunneling, reproducibility and

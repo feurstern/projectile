@@ -64,6 +64,17 @@ TEST_CASE("every error has its own description", "[core][result]") {
         Error::invalid_max_substeps,
         Error::invalid_max_frame_delta,
         Error::invalid_shape,
+        Error::invalid_drag_coefficient,
+        Error::invalid_reference_area,
+        Error::invalid_air_density,
+        Error::invalid_wind,
+        Error::invalid_penetration_cost,
+        Error::invalid_resistance,
+        Error::invalid_restitution,
+        Error::invalid_friction,
+        Error::invalid_ricochet_angle,
+        Error::invalid_stopping_speed,
+        Error::invalid_max_impacts,
     };
     std::set<std::string_view> descriptions;
     for (const Error error : errors) {

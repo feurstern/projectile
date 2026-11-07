@@ -2,9 +2,10 @@
 
 The simulation module (`include/projectile/simulation/`) advances many projectiles together at a
 fixed time step. It integrates their motion, sweeps them through a collision world so that fast
-projectiles cannot pass through thin objects, and reports the end of each flight. It builds on
-the ballistics module ([ballistics.md](ballistics.md)) and the collision module
-([collision.md](collision.md)).
+projectiles cannot pass through thin objects, lets a material model decide whether they
+ricochet, penetrate or stop, and reports impacts and the end of each flight. It builds on the
+ballistics module ([ballistics.md](ballistics.md)), the collision module
+([collision.md](collision.md)) and the materials module ([materials.md](materials.md)).
 
 ```cpp
 #include <projectile/projectile.hpp>
@@ -55,6 +56,7 @@ simulation, or the `Error` that makes the settings invalid.
 | `max_substeps` | 8 | Most steps one `update()` runs. At least 1. |
 | `max_frame_delta` | 0.25 s | Most simulated time that can be owed. Finite and no shorter than `time_step`. |
 | `integrator` | `semi_implicit_euler` | The integrator that advances projectiles; see [ballistics.md](ballistics.md). |
+| `max_impacts_per_step` | 4 | Most impacts one projectile may have in one step. At least 1. See [Impacts](#impacts). |
 
 ## The fixed time step
 
@@ -104,9 +106,13 @@ A projectile then flies until one of these happens:
 
 | Event | Cause | The projectile |
 |---|---|---|
-| `ProjectileEventKind::hit` | Its sphere touches the collision world | Stops at the contact and leaves |
+| `ProjectileEventKind::hit` | Its sphere touches the collision world, and stops there | Stops at the contact and leaves |
 | `ProjectileEventKind::expired` | Its lifetime runs out | Stops where it is and leaves |
 | none | You call `remove_projectile(id)` or `clear()` | Leaves at once |
+
+With an interaction model (see [Impacts](#impacts)), contacts can also produce
+`ProjectileEventKind::ricochet` and `ProjectileEventKind::penetration` events, after which the
+projectile flies on.
 
 A projectile added with an inactive state expires at the next step without moving.
 
@@ -136,13 +142,15 @@ Set a world with `set_collision_world(&world)`: any `ICollisionWorld`, such as t
 world. Pass `nullptr` to fly without collisions.
 
 Each step advances every projectile with the integrator, then sweeps a sphere of its
-`config.radius` along the straight line from where it was to where it is now. At the first
-contact:
+`config.radius` along the straight line from where it was to where it is now. The first contact
+is an impact:
 
-- the projectile stops, inactive, with its center on that line at the contact and the velocity it
-  had there;
 - the event's `time` is the time of impact, between the start and the end of the step;
+- the event's `state` has the projectile's center on that line at the contact, and the velocity
+  it struck with;
 - the event's `hit` is the `HitResult`, whose `point` lies on the surface that was hit.
+
+Without an interaction model, every impact stops the projectile (a `hit` event).
 
 **Fast projectiles cannot pass through thin objects.** At 120 Hz, a bullet at 1,000 m/s covers
 8.3 m per step. Testing only where it ends each step would miss anything thinner than that. The
@@ -156,8 +164,28 @@ a step; the largest gap between the two is `g·dt²/8`, 0.09 mm at 120 Hz.
 world takes the same steps and sweeps, so a preview ends exactly where the simulated projectile
 hits: the same contact, position and velocity, bit for bit.
 
-In this version every hit ends the flight. Material responses such as ricochet and penetration
-are planned for Milestone 5.
+Predictions stop at the first contact, though: they do not apply interactions.
+
+## Impacts
+
+Give the simulation a `MaterialTable` and an interaction model to make impacts depend on what was
+struck:
+
+```cpp
+const StandardInteraction interaction;
+simulation.set_materials(&materials);       // ids reported by the world -> Material
+simulation.set_interaction(&interaction);   // decides each impact
+```
+
+At each impact the model decides whether the projectile ricochets, penetrates or stops (see
+[materials.md](materials.md) for the standard model and for writing your own). A projectile that
+ricochets continues from just clear of the surface; one that penetrates continues from just beyond
+the object, with the energy it has left. Either way it flies on for the rest of the step, and may
+strike again. After `max_impacts_per_step` impacts in one step, it waits where it is until the
+next step, so a projectile trapped between two surfaces cannot stall the simulation.
+
+The simulation and the models own nothing they are given: the table and the model must outlive
+the simulation, or be replaced first.
 
 ## Events
 
@@ -166,15 +194,17 @@ receives every event:
 
 | Field | Meaning |
 |---|---|
-| `kind` | `hit` or `expired` |
-| `id` | The projectile's id, no longer valid |
+| `kind` | `hit`, `expired`, `ricochet` or `penetration` |
+| `id` | The projectile's id: still valid after a ricochet or penetration, no longer valid after a hit or expiry |
 | `time` | Simulation time of the event, in s |
-| `state` | The final state, inactive; for a hit, at the contact |
+| `state` | For an impact, the state at the contact with the velocity it struck with; after an expiry, the final state |
 | `config` | The projectile's configuration, for example to compute impact energy from its mass |
-| `hit` | The contact, for hits |
+| `hit` | The contact, for impacts |
+| `interaction` | The interaction model's decision, for impacts when there is a model: the outgoing velocity and the remaining energy |
 
-Events arrive after the step that produced them has finished, in a deterministic order. By then
-the projectiles they report have left the simulation. Inside the callback you may:
+Events arrive after the step that produced them has finished, in a deterministic order: within a
+projectile, in the order they happened. By then the projectiles whose flight ended have left the
+simulation. Inside the callback you may:
 
 - read the simulation, and add or remove projectiles (projectiles added move from the next step
   on);
@@ -199,7 +229,8 @@ for (const SimulatedProjectile& projectile : simulation.projectiles()) {
 
 `interpolation_alpha()` is how far the time carried over reaches into the next step. Drawing
 then lags the simulation by less than one step, 8 ms at 120 Hz. A projectile added since the last
-step is drawn where it was added.
+step is drawn where it was added. A projectile that ricocheted during the last step is drawn along
+the straight line between its positions before and after, which cuts the corner of the bounce.
 
 ## Determinism
 
@@ -229,7 +260,8 @@ architecture.
 ## Memory
 
 The simulation keeps the memory of projectiles that left and reuses it. Once it has held its
-largest number of projectiles, adding, stepping and removing projectiles allocates nothing.
+largest number of projectiles and reported its largest number of events in one step, adding,
+stepping and removing projectiles allocates nothing.
 `reserve(count)` allocates that memory up front. The integration tests count heap allocations
 over 20 seconds of continuous firing: there are none.
 
@@ -244,7 +276,8 @@ concurrently, such as a `PrimitiveWorld` to which no shapes are added meanwhile.
 
 ## Limitations
 
-- **Every hit ends the flight.** Ricochet and penetration come with Milestone 5.
+- **Impacts take no time.** See [materials.md](materials.md#mathematical-assumptions-and-limitations)
+  for the assumptions of the material model.
 - **Projectiles do not collide with each other.**
 - **The world is static during a step.** The sweep does not account for a target that moves
   within the step. Move targets between updates; very fast targets may then be missed.

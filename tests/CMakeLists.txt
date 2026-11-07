@@ -42,6 +42,7 @@ include(Catch)
 
 add_executable(
     projectile_unit_tests
+    unit/ballistics/test_drag.cpp
     unit/ballistics/test_integrator.cpp
     unit/ballistics/test_projectile.cpp
     unit/ballistics/test_trajectory.cpp
@@ -55,6 +56,8 @@ add_executable(
     unit/collision/test_triangle_intersection.cpp
     unit/core/test_result.cpp
     unit/core/test_version.cpp
+    unit/materials/test_interaction.cpp
+    unit/materials/test_material.cpp
     unit/math/test_aabb.cpp
     unit/math/test_math_utils.cpp
     unit/math/test_plane.cpp
@@ -65,6 +68,7 @@ add_executable(
     unit/math/test_vec2.cpp
     unit/math/test_vec3.cpp
     unit/simulation/test_fixed_timestep.cpp
+    unit/simulation/test_impacts.cpp
     unit/simulation/test_simulation.cpp)
 target_link_libraries(projectile_unit_tests PRIVATE Projectile::Projectile Catch2::Catch2WithMain)
 # Test helpers in support/ are included as "support/<name>.hpp".

@@ -2,7 +2,7 @@
 
 /// @file
 /// @brief Settings of a real-time simulation: its fixed time step, the limits that keep long
-/// frames from destabilizing it, and its integrator.
+/// frames from destabilizing it, its integrator, and its limit on impacts per step.
 
 #include "projectile/ballistics/integrator.hpp"
 #include "projectile/core/result.hpp"
@@ -35,6 +35,12 @@ struct SimulationConfig {
 
     /// The integrator that advances projectiles.
     IntegratorKind integrator = IntegratorKind::semi_implicit_euler;
+
+    /// Most impacts one projectile may have in one step; at least 1. A projectile that ricochets
+    /// or penetrates flies on for the rest of the step and may strike again. After this many
+    /// impacts it waits where it is until the next step, so that a projectile caught between
+    /// surfaces cannot stall the simulation.
+    std::uint32_t max_impacts_per_step = 4;
 };
 
 /// Checks @p config and returns the first problem found, or `std::nullopt` if it is valid.
@@ -47,6 +53,9 @@ struct SimulationConfig {
     }
     if (!std::isfinite(config.max_frame_delta) || !(config.max_frame_delta >= config.time_step)) {
         return Error::invalid_max_frame_delta;
+    }
+    if (config.max_impacts_per_step == 0) {
+        return Error::invalid_max_impacts;
     }
     return std::nullopt;
 }

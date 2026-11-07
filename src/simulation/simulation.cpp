@@ -1,12 +1,17 @@
 #include "projectile/simulation/simulation.hpp"
 
+#include "projectile/ballistics/forces.hpp"
 #include "projectile/ballistics/integrator.hpp"
+#include "projectile/collision/raycast.hpp"
+#include "projectile/collision/sweep.hpp"
+#include "projectile/math/ray.hpp"
 
 #include "ballistics/step_contact.hpp"
 
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
+#include <limits>
 #include <optional>
 #include <stdexcept>
 #include <utility>
@@ -43,6 +48,72 @@ template <typename Items>
 /// The generation after @p generation, wrapping around from the largest to 1.
 [[nodiscard]] constexpr std::uint32_t next_generation(std::uint32_t generation) noexcept {
     return generation == ~std::uint32_t{0} ? 1U : generation + 1U;
+}
+
+// --- Impacts --------------------------------------------------------------------------------
+
+/// How far a projectile that survives an impact is moved clear of the surfaces it touches, in m,
+/// so that the next sweep does not find the same contact again.
+constexpr double contact_skin = 1e-6;
+
+/// The material a projectile struck when surfaces have no material table: one that stops it.
+constexpr Material default_material{};
+
+/// Whether events of @p kind end a projectile's flight.
+[[nodiscard]] constexpr bool ends_flight(ProjectileEventKind kind) noexcept {
+    return kind == ProjectileEventKind::hit || kind == ProjectileEventKind::expired;
+}
+
+/// How far a ray in the unit @p direction from the contact @p hit runs through the object struck:
+/// up to where it leaves the object, a back face of the same material. Zero if the ray does not
+/// leave it there, as for a plane or a single triangle, which have no thickness.
+[[nodiscard]] double thickness_at(
+    const ICollisionWorld& world, const HitResult& hit, const Vec3& direction
+) {
+    const Ray ray{.origin = hit.point + direction * contact_skin, .direction = direction};
+    const std::optional<HitResult> exit =
+        raycast(world, ray, std::numeric_limits<double>::infinity());
+    if (exit && !exit->front_face && exit->material_id == hit.material_id) {
+        return exit->distance + contact_skin;
+    }
+    return 0.0;
+}
+
+/// Where the center of a projectile of @p radius, which was at @p center when it struck @p hit,
+/// flies on from after ricocheting off the surface or penetrating it in the unit @p direction,
+/// through an object of @p thickness.
+[[nodiscard]] Vec3 continuation_point(
+    const ICollisionWorld& world,
+    const Vec3& center,
+    const HitResult& hit,
+    InteractionOutcome outcome,
+    const Vec3& direction,
+    double radius,
+    double thickness
+) {
+    if (outcome == InteractionOutcome::ricocheted) {
+        // The normal faces the projectile; a step along it clears the surface.
+        return center + hit.normal * contact_skin;
+    }
+    // Penetrated: move on through the object until the projectile no longer overlaps it, which
+    // a sweep reports as a back-face contact. The reach covers the thickness and the projectile's
+    // own size, which an oblique path crosses at a slant.
+    const Vec3 start = center + direction * contact_skin;
+    const double slant = (std::max)(-dot(direction, hit.normal), 0.05);
+    const double reach =
+        thickness + (2.0 * radius + 2.0 * contact_skin) / slant + 2.0 * radius + contact_skin;
+    const Vec3 end = start + direction * reach;
+    const std::optional<HitResult> probe = sweep_sphere(world, start, end, radius);
+    if (!probe) {
+        return end; // clear of everything along the way
+    }
+    if (!probe->front_face) {
+        return start + direction * (probe->distance + contact_skin); // where it leaves the object
+    }
+    // It reaches another object first. Stop just short of it: a projectile left exactly touching
+    // a surface could, by rounding, overlap it, and a sweep from inside a surface does not stop
+    // there. The next sweep finds the object at once.
+    return start + direction * (probe->distance - contact_skin);
 }
 
 } // namespace
@@ -160,17 +231,20 @@ void Simulation::set_event_callback(ProjectileEventCallback callback) {
 void Simulation::report(
     ProjectileEventKind kind,
     const SimulatedProjectile& simulated,
+    const ProjectileState& state,
     double time,
-    const std::optional<HitResult>& hit
+    const std::optional<HitResult>& hit,
+    const std::optional<InteractionResult>& interaction
 ) {
     events_.push_back(
         ProjectileEvent{
             .kind = kind,
             .id = simulated.id,
             .time = time,
-            .state = simulated.state,
+            .state = state,
             .config = simulated.config,
             .hit = hit,
+            .interaction = interaction,
         }
     );
 }
@@ -229,41 +303,130 @@ void Simulation::step() {
     ++step_count_;
     // Projectiles whose flight ended leave before their events are reported.
     for (const ProjectileEvent& event : events_) {
-        remove_projectile(event.id);
+        if (ends_flight(event.kind)) {
+            remove_projectile(event.id);
+        }
     }
     deliver_events();
 }
 
 void Simulation::advance(SimulatedProjectile& simulated, double start_time) {
     ProjectileState& state = simulated.state;
+    const ProjectileConfig& config = simulated.config;
     simulated.previous_position = state.position;
     if (!state.active) {
-        report(ProjectileEventKind::expired, simulated, start_time, std::nullopt);
+        report(
+            ProjectileEventKind::expired, simulated, state, start_time, std::nullopt, std::nullopt
+        );
         return;
     }
-    const ProjectileState from = state;
-    // How long the projectile moves in this step: the integrators stop at the end of its life.
-    const double duration = (std::min)(config_.time_step, from.remaining_lifetime);
-    // Qualified: inside the class, the name would find the member step().
-    projectile::step(config_.integrator, state, simulated.config, config_.time_step);
+    // The projectile moves for the whole step, unless impacts it survives split the motion into
+    // parts; each part starts at `time` and lasts `remaining`.
+    double time = start_time;
+    double remaining = config_.time_step;
+    for (std::uint32_t impacts = 0;;) {
+        const ProjectileState from = state;
+        // How long it moves: the integrators stop at the end of its life.
+        const double duration = (std::min)(remaining, from.remaining_lifetime);
+        // Qualified: inside the class, the name would find the member step().
+        projectile::step(config_.integrator, state, config, remaining);
 
-    if (world_ != nullptr && duration > 0.0) {
-        if (const std::optional<detail::StepContact> contact =
-                detail::sweep_step(*world_, from, state, simulated.config.radius)) {
-            state =
-                detail::contact_state(from, state, duration, contact->fraction, simulated.config);
+        std::optional<detail::StepContact> contact;
+        if (world_ != nullptr && duration > 0.0) {
+            contact = detail::sweep_step(*world_, from, state, config.radius);
+        }
+        if (!contact) {
+            if (!state.active) {
+                report(
+                    ProjectileEventKind::expired,
+                    simulated,
+                    state,
+                    time + duration,
+                    std::nullopt,
+                    std::nullopt
+                );
+            }
+            return;
+        }
+
+        const ProjectileState at_contact =
+            detail::contact_state(from, state, duration, contact->fraction, config);
+        const double contact_time = time + contact->fraction * duration;
+        if (interaction_ == nullptr) {
+            state = at_contact;
             report(
-                ProjectileEventKind::hit,
-                simulated,
-                start_time + contact->fraction * duration,
-                contact->hit
+                ProjectileEventKind::hit, simulated, state, contact_time, contact->hit, std::nullopt
             );
             return;
         }
+
+        // The thickness is measured along the path the projectile struck on.
+        const std::optional<Vec3> incoming = try_normalize(at_contact.velocity);
+        const double thickness = incoming ? thickness_at(*world_, contact->hit, *incoming) : 0.0;
+        InteractionResult result = resolve(at_contact, config, contact->hit, thickness);
+        const std::optional<Vec3> direction = try_normalize(result.outgoing_velocity);
+        if (result.outcome == InteractionOutcome::stopped || !direction) {
+            if (result.outcome != InteractionOutcome::stopped) {
+                result = InteractionResult{}; // a velocity of zero, or not finite, stops it
+            }
+            state = at_contact;
+            report(ProjectileEventKind::hit, simulated, state, contact_time, contact->hit, result);
+            return;
+        }
+
+        ProjectileState struck = at_contact;
+        struck.active = true;
+        report(
+            result.outcome == InteractionOutcome::ricocheted ? ProjectileEventKind::ricochet
+                                                             : ProjectileEventKind::penetration,
+            simulated,
+            struck,
+            contact_time,
+            contact->hit,
+            result
+        );
+        const Vec3 position = continuation_point(
+            *world_,
+            at_contact.position,
+            contact->hit,
+            result.outcome,
+            *direction,
+            config.radius,
+            thickness
+        );
+        state = ProjectileState{
+            .position = position,
+            .velocity = result.outgoing_velocity,
+            .acceleration = forces_of(config)(position, result.outgoing_velocity),
+            .remaining_lifetime = at_contact.remaining_lifetime,
+            .active = true,
+        };
+        remaining -= contact->fraction * duration;
+        time = contact_time;
+        if (++impacts >= config_.max_impacts_per_step || !(remaining > 0.0)) {
+            return; // it waits here until the next step
+        }
     }
-    if (!state.active) {
-        report(ProjectileEventKind::expired, simulated, start_time + duration, std::nullopt);
-    }
+}
+
+InteractionResult Simulation::resolve(
+    const ProjectileState& at_contact,
+    const ProjectileConfig& config,
+    const HitResult& hit,
+    double thickness
+) const {
+    ProjectileState struck = at_contact;
+    struck.active = true;
+    return interaction_->resolve(
+        Impact{
+            .state = struck,
+            .config = config,
+            .hit = hit,
+            .material = materials_ != nullptr ? materials_->material_for(hit.material_id)
+                                              : default_material,
+            .thickness = thickness,
+        }
+    );
 }
 
 } // namespace projectile

@@ -305,9 +305,9 @@ TEST_CASE(
             random.integer(0, 1) == 0 ? IntegratorKind::semi_implicit_euler : IntegratorKind::rk4;
         ProjectileConfig config = falling();
         config.lifetime = random.uniform(0.0, 1.0) < 0.3 ? random.uniform(0.01, 3.0) : infinity;
-        const ProjectileState start = require_value(
-            create_projectile(config, random.vec3(-10.0, 10.0), random.vec3(-50.0, 50.0))
-        );
+        const Vec3 position = random.vec3(-10.0, 10.0);
+        const Vec3 velocity = random.vec3(-50.0, 50.0);
+        const ProjectileState start = require_value(create_projectile(config, position, velocity));
         CAPTURE(
             settings.sample_interval, settings.time_step, settings.max_duration, config.lifetime
         );

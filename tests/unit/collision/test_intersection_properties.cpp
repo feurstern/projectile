@@ -85,10 +85,11 @@ TEST_CASE("sphere hits follow the query conventions", "[collision][sphere][prope
         const Sphere sphere{.center = random.vec3(-10.0, 10.0), .radius = random.uniform(0.1, 5.0)};
         // A quarter of the rays start inside the sphere, where the contact is the exit.
         const bool start_inside = random.uniform(0.0, 1.0) < 0.25;
-        const Vec3 origin =
-            start_inside
-                ? sphere.center + random.unit_vec3() * random.uniform(0.0, 0.99 * sphere.radius)
-                : random.vec3(-50.0, 50.0);
+        Vec3 origin = random.vec3(-50.0, 50.0);
+        if (start_inside) {
+            const Vec3 direction = random.unit_vec3();
+            origin = sphere.center + direction * random.uniform(0.0, 0.99 * sphere.radius);
+        }
         // Origins drawn from the whole cube can land inside the sphere too.
         const bool origin_inside =
             length_squared(origin - sphere.center) < sphere.radius * sphere.radius;
@@ -119,8 +120,9 @@ TEST_CASE("box hits follow the query conventions", "[collision][aabb][property]"
     int hits = 0;
     int back_faces = 0;
     for (int i = 0; i < sample_count; ++i) {
-        const AABB box =
-            require_value(make_aabb(random.vec3(-10.0, 10.0), random.vec3(-10.0, 10.0)));
+        const Vec3 corner_a = random.vec3(-10.0, 10.0);
+        const Vec3 corner_b = random.vec3(-10.0, 10.0);
+        const AABB box = require_value(make_aabb(corner_a, corner_b));
         const bool start_inside = random.uniform(0.0, 1.0) < 0.25;
         const Vec3 origin = start_inside
                                 ? Vec3{
@@ -222,9 +224,11 @@ TEST_CASE("plane hits follow the query conventions", "[collision][plane][propert
     int hits = 0;
     int back_faces = 0;
     for (int i = 0; i < sample_count; ++i) {
-        const Plane plane = require_value(make_plane(random.unit_vec3(), random.vec3(-10.0, 10.0)));
-        const Ray ray =
-            ray_towards(random, random.vec3(-50.0, 50.0), random.vec3(-10.0, 10.0), 0.0);
+        const Vec3 normal = random.unit_vec3();
+        const Plane plane = require_value(make_plane(normal, random.vec3(-10.0, 10.0)));
+        const Vec3 origin = random.vec3(-50.0, 50.0);
+        const Vec3 target = random.vec3(-10.0, 10.0);
+        const Ray ray = ray_towards(random, origin, target, 0.0);
         const double max_distance = random.uniform(0.0, 120.0);
         CAPTURE(plane, ray, max_distance);
 

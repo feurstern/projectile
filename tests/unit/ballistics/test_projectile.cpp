@@ -39,6 +39,19 @@ TEST_CASE("a default ProjectileConfig is valid and assumes no up axis", "[ballis
     CHECK(config.gravity == Vec3{}); // no gravity until it is configured
     CHECK(config.radius == 0.0);     // a point
     CHECK(config.lifetime == infinity);
+    CHECK(config.drag_coefficient == 0.0); // no air resistance until it is configured
+    CHECK(config.air_density == standard_air_density);
+    CHECK(config.wind == Vec3{});
+}
+
+TEST_CASE("a configuration with drag needs a reference area", "[ballistics][config]") {
+    ProjectileConfig config = falling_config();
+    config.drag_coefficient = 0.47;
+    CHECK(validate(config) == Error::invalid_reference_area);
+    config.reference_area = 0.01;
+    CHECK_FALSE(validate(config).has_value());
+    config.air_density = 0.0; // a vacuum is allowed: drag then vanishes
+    CHECK_FALSE(validate(config).has_value());
 }
 
 TEST_CASE("validate reports each invalid parameter with its own error", "[ballistics][config]") {
@@ -56,6 +69,16 @@ TEST_CASE("validate reports each invalid parameter with its own error", "[ballis
         {[](ProjectileConfig& c) { c.lifetime = 0.0; }, Error::invalid_lifetime},
         {[](ProjectileConfig& c) { c.lifetime = -1.0; }, Error::invalid_lifetime},
         {[](ProjectileConfig& c) { c.lifetime = not_a_number; }, Error::invalid_lifetime},
+        {[](ProjectileConfig& c) { c.drag_coefficient = -0.1; }, Error::invalid_drag_coefficient},
+        {[](ProjectileConfig& c) { c.drag_coefficient = infinity; },
+         Error::invalid_drag_coefficient},
+        {[](ProjectileConfig& c) { c.reference_area = -1.0; }, Error::invalid_reference_area},
+        {[](ProjectileConfig& c) { c.reference_area = not_a_number; },
+         Error::invalid_reference_area},
+        {[](ProjectileConfig& c) { c.drag_coefficient = 0.3; }, Error::invalid_reference_area},
+        {[](ProjectileConfig& c) { c.air_density = -1.0; }, Error::invalid_air_density},
+        {[](ProjectileConfig& c) { c.air_density = infinity; }, Error::invalid_air_density},
+        {[](ProjectileConfig& c) { c.wind.z = not_a_number; }, Error::invalid_wind},
     };
     for (const auto& [change, expected] : cases) {
         ProjectileConfig config = falling_config();
@@ -120,10 +143,14 @@ TEST_CASE("validate checks a projectile state", "[ballistics][state]") {
     CHECK(validate(state) == Error::invalid_velocity);
 }
 
-TEST_CASE("the forces on a projectile are its uniform gravity", "[ballistics][forces]") {
-    constexpr ProjectileForces forces{.gravity = {0.0, 0.0, -9.0}};
-    STATIC_REQUIRE(forces(Vec3{}, Vec3{}) == Vec3{0.0, 0.0, -9.0});
-    STATIC_REQUIRE(forces(Vec3{100.0, -5.0, 3.0}, Vec3{300.0, 0.0, 0.0}) == Vec3{0.0, 0.0, -9.0});
-    CHECK(forces_of(falling_config()).gravity == Vec3{0.0, -standard_gravity, 0.0});
+TEST_CASE(
+    "without drag, the forces on a projectile are its uniform gravity", "[ballistics][forces]"
+) {
+    const ProjectileForces forces = forces_of(falling_config());
+    CHECK(forces.drag_factor == 0.0);
+    CHECK(forces(Vec3{}, Vec3{}) == Vec3{0.0, -standard_gravity, 0.0});
+    CHECK(
+        forces(Vec3{100.0, -5.0, 3.0}, Vec3{300.0, 0.0, 0.0}) == Vec3{0.0, -standard_gravity, 0.0}
+    );
     STATIC_REQUIRE(AccelerationField<ProjectileForces>);
 }
