@@ -9,6 +9,8 @@
 #include "projectile/collision/hit_result.hpp"
 #include "projectile/core/export.hpp"
 #include "projectile/core/result.hpp"
+#include "projectile/materials/interaction.hpp"
+#include "projectile/materials/material.hpp"
 #include "projectile/math/vec3.hpp"
 #include "projectile/simulation/fixed_timestep.hpp"
 #include "projectile/simulation/simulation_config.hpp"
@@ -64,32 +66,43 @@ struct SimulatedProjectile {
     return lerp(projectile.previous_position, projectile.state.position, alpha);
 }
 
-/// Why a projectile's flight ended.
+/// What happened to a projectile.
 enum class ProjectileEventKind : std::uint8_t {
-    hit,     ///< It hit the collision world, and stopped at the contact.
-    expired, ///< Its lifetime ran out.
+    hit,         ///< It hit the collision world and stopped there. Its flight ended.
+    expired,     ///< Its lifetime ran out. Its flight ended.
+    ricochet,    ///< It ricocheted off the collision world and flies on.
+    penetration, ///< It passed through an object of the collision world and flies on.
 };
 
-/// Reports the end of a projectile's flight. The simulation has already removed the projectile.
+/// Reports an impact or the end of a projectile's flight.
+///
+/// After a `hit` or `expired` event the simulation has already removed the projectile. After a
+/// `ricochet` or `penetration` it flies on, and may report further events in the same step.
 struct ProjectileEvent {
     /// What happened.
     ProjectileEventKind kind = ProjectileEventKind::hit;
 
-    /// The projectile's id, which is no longer valid.
+    /// The projectile's id: still valid after a ricochet or penetration, no longer valid after a
+    /// hit or expiry.
     ProjectileId id;
 
-    /// Simulation time at which it happened, in s. For a hit, the time of impact, which lies
+    /// Simulation time at which it happened, in s. For an impact, the time of impact, which lies
     /// within the step that found it.
     double time = 0.0;
 
-    /// The projectile's final state, inactive. For a hit, its center and velocity at the contact.
+    /// The projectile's state at the event. For an impact, its center at the contact and the
+    /// velocity it struck with; after an expiry, its final state. Inactive when its flight ended.
     ProjectileState state;
 
     /// The projectile's parameters.
     ProjectileConfig config;
 
-    /// The contact, for hits.
+    /// The contact, for impacts (`hit`, `ricochet` and `penetration`).
     std::optional<HitResult> hit;
+
+    /// What the interaction model decided, for impacts when the simulation has one (see
+    /// Simulation::set_interaction()): the outgoing velocity and the remaining energy.
+    std::optional<InteractionResult> interaction;
 
     /// Exact member-wise comparison.
     constexpr bool operator==(const ProjectileEvent&) const = default;
@@ -111,8 +124,11 @@ using ProjectileEventCallback = std::function<void(const ProjectileEvent&)>;
 /// update() runs as many fixed steps as the frame's time calls for, through a FixedTimestep, so
 /// the result depends only on the number of steps, never on the frame rate. Each step advances
 /// every projectile with the configured integrator, then sweeps it through the collision world,
-/// if one is set, along the straight line it moved. A projectile ends its flight when it hits the
-/// world or its lifetime runs out. It then leaves the simulation, and an event reports it.
+/// if one is set, along the straight line it moved. At a contact, the interaction model, if one is
+/// set, decides whether the projectile ricochets, penetrates or stops (see set_interaction());
+/// without one, every contact stops it. A projectile ends its flight when it stops or its
+/// lifetime runs out. It then leaves the simulation. Events report impacts and the ends of
+/// flights.
 ///
 /// **Projectiles.** add_projectile() returns a ProjectileId that stays valid until the projectile
 /// leaves. projectiles() lists the projectiles in a deterministic but unspecified order, which
@@ -126,8 +142,8 @@ using ProjectileEventCallback = std::function<void(const ProjectileEvent&)>;
 /// leaves the step, and the step's remaining events are not reported.
 ///
 /// **Memory.** The simulation reuses the memory of projectiles that left, so once it has held its
-/// largest number of projectiles, adding and stepping projectiles allocates nothing.
-/// reserve() allocates that memory up front.
+/// largest number of projectiles and reported its largest number of events in one step, adding
+/// and stepping projectiles allocates nothing. reserve() allocates that memory up front.
 ///
 /// **Determinism.** The same projectiles, settings, collision world and sequence of calls give
 /// bit-identical results in the same build. See docs/simulation.md for other builds.
@@ -187,6 +203,30 @@ public:
     /// The collision world projectiles fly through, or `nullptr`.
     [[nodiscard]] const ICollisionWorld* collision_world() const noexcept { return world_; }
 
+    /// Sets the materials that the collision world's material ids refer to, or none with
+    /// `nullptr` (the default), in which case every surface is made of a default Material. The
+    /// simulation does not own the table, which must outlive it or be replaced first.
+    void set_materials(const MaterialTable* materials) noexcept { materials_ = materials; }
+
+    /// The materials that the collision world's material ids refer to, or `nullptr`.
+    [[nodiscard]] const MaterialTable* materials() const noexcept { return materials_; }
+
+    /// Sets the model that decides what happens when a projectile strikes the collision world,
+    /// such as a StandardInteraction, or none with `nullptr` (the default), in which case every
+    /// contact stops the projectile. The simulation does not own the model, which must outlive it
+    /// or be replaced first.
+    ///
+    /// A projectile that ricochets or penetrates flies on for the rest of the step, from just
+    /// clear of the surface, and may strike again, up to SimulationConfig::max_impacts_per_step
+    /// times. A model that returns a velocity of zero or a non-finite velocity stops the
+    /// projectile. See docs/materials.md.
+    void set_interaction(const IMaterialInteraction* interaction) noexcept {
+        interaction_ = interaction;
+    }
+
+    /// The model that decides what happens at impacts, or `nullptr`.
+    [[nodiscard]] const IMaterialInteraction* interaction() const noexcept { return interaction_; }
+
     /// Sets the function that receives events, or none with an empty function (the default).
     /// When it is called from inside the callback, the new callback receives events from the
     /// next step on.
@@ -235,11 +275,19 @@ private:
 
     [[nodiscard]] const Slot* slot_of(ProjectileId id) const noexcept;
     void advance(SimulatedProjectile& simulated, double start_time);
+    [[nodiscard]] InteractionResult resolve(
+        const ProjectileState& at_contact,
+        const ProjectileConfig& config,
+        const HitResult& hit,
+        double thickness
+    ) const;
     void report(
         ProjectileEventKind kind,
         const SimulatedProjectile& simulated,
+        const ProjectileState& state,
         double time,
-        const std::optional<HitResult>& hit
+        const std::optional<HitResult>& hit,
+        const std::optional<InteractionResult>& interaction
     );
     void deliver_events();
     void finish_delivery(ProjectileEventCallback& callback) noexcept;
@@ -251,7 +299,9 @@ private:
     std::uint32_t free_slot_ = no_slot;   ///< First free slot, or no_slot.
     std::vector<ProjectileEvent> events_; ///< Events of the current step.
     ProjectileEventCallback callback_;
-    const ICollisionWorld* world_ = nullptr; ///< Not owned.
+    const ICollisionWorld* world_ = nullptr;            ///< Not owned.
+    const MaterialTable* materials_ = nullptr;          ///< Not owned.
+    const IMaterialInteraction* interaction_ = nullptr; ///< Not owned.
     std::uint64_t step_count_ = 0;
     bool delivering_ = false;        ///< Whether the callback is running.
     bool callback_replaced_ = false; ///< Whether the callback set a new callback.
