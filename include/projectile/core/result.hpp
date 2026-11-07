@@ -26,12 +26,24 @@ enum class Error : std::uint8_t {
     invalid_lifetime,  ///< A lifetime is not greater than zero, or a remaining lifetime is negative
                        ///< or NaN.
     invalid_time_step, ///< A time step is not finite, or not greater than zero.
-    invalid_sample_interval, ///< A sample interval is not finite, or not greater than zero.
-    invalid_duration,        ///< A duration is negative or not finite.
-    invalid_max_substeps,    ///< A maximum number of substeps is zero.
-    invalid_max_frame_delta, ///< A maximum frame delta is not finite, or shorter than the time
-                             ///< step.
-    invalid_shape,           ///< A geometric shape is not valid (see the is_valid() functions).
+    invalid_sample_interval,  ///< A sample interval is not finite, or not greater than zero.
+    invalid_duration,         ///< A duration is negative or not finite.
+    invalid_max_substeps,     ///< A maximum number of substeps is zero.
+    invalid_max_frame_delta,  ///< A maximum frame delta is not finite, or shorter than the time
+                              ///< step.
+    invalid_shape,            ///< A geometric shape is not valid (see the is_valid() functions).
+    invalid_drag_coefficient, ///< A drag coefficient is negative or not finite.
+    invalid_reference_area,   ///< A reference area is negative or not finite, or zero while
+                              ///< there is drag.
+    invalid_air_density,      ///< An air density is negative or not finite.
+    invalid_wind,             ///< A wind velocity is not finite.
+    invalid_penetration_cost, ///< A penetration cost is negative or NaN.
+    invalid_resistance,       ///< A material resistance is negative or not finite.
+    invalid_restitution,      ///< A restitution is outside [0, 1].
+    invalid_friction,         ///< A friction is outside [0, 1].
+    invalid_ricochet_angle,   ///< A ricochet angle is outside [0, π/2].
+    invalid_stopping_speed,   ///< A stopping speed is negative or not finite.
+    invalid_max_impacts,      ///< A maximum number of impacts per step is zero.
 };
 
 /// A short description of @p error in English, for logs and messages.
@@ -61,6 +73,28 @@ enum class Error : std::uint8_t {
         return "maximum frame delta must be finite and no shorter than the time step";
     case Error::invalid_shape:
         return "shape must be valid: finite, with unit normals and ordered box corners";
+    case Error::invalid_drag_coefficient:
+        return "drag coefficient must be finite and zero or greater";
+    case Error::invalid_reference_area:
+        return "reference area must be finite and zero or greater, and greater than zero with drag";
+    case Error::invalid_air_density:
+        return "air density must be finite and zero or greater";
+    case Error::invalid_wind:
+        return "wind velocity must be finite";
+    case Error::invalid_penetration_cost:
+        return "penetration cost must be zero or greater (infinity means impenetrable)";
+    case Error::invalid_resistance:
+        return "resistance must be finite and zero or greater";
+    case Error::invalid_restitution:
+        return "restitution must be between 0 and 1";
+    case Error::invalid_friction:
+        return "friction must be between 0 and 1";
+    case Error::invalid_ricochet_angle:
+        return "ricochet angle must be between 0 and pi/2 radians";
+    case Error::invalid_stopping_speed:
+        return "stopping speed must be finite and zero or greater";
+    case Error::invalid_max_impacts:
+        return "maximum number of impacts per step must be at least 1";
     }
     return "unknown error";
 }
