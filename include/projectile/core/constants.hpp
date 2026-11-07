@@ -12,4 +12,8 @@ namespace projectile {
 /// up.
 inline constexpr double standard_gravity = 9.80665;
 
+/// Density of air at sea level and 15 °C in the International Standard Atmosphere, in kg/m³:
+/// the default air density for drag.
+inline constexpr double standard_air_density = 1.225;
+
 } // namespace projectile
