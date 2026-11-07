@@ -79,7 +79,9 @@ TEST_CASE("a world's results are those of the shape queries", "[collision][world
     test::Random random;
     for (int i = 0; i < 2'000; ++i) {
         const Sphere sphere{.center = random.vec3(-3.0, 3.0), .radius = random.uniform(0.1, 2.0)};
-        const AABB box = require_value(make_aabb(random.vec3(-3.0, 3.0), random.vec3(-3.0, 3.0)));
+        const Vec3 corner_a = random.vec3(-3.0, 3.0);
+        const Vec3 corner_b = random.vec3(-3.0, 3.0);
+        const AABB box = require_value(make_aabb(corner_a, corner_b));
         PrimitiveWorld world;
         REQUIRE_FALSE(world.add(sphere, 1));
         REQUIRE_FALSE(world.add(box, 2));
