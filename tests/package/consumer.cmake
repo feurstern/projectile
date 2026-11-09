@@ -12,6 +12,14 @@ if(_projectile_compile_options)
         "Projectile::Projectile passes compile options to consumers: ${_projectile_compile_options}")
 endif()
 
+# The core library depends on the C++ standard library alone, so it must not pass any other
+# library on to its consumers.
+get_target_property(_projectile_link_libraries Projectile::Projectile INTERFACE_LINK_LIBRARIES)
+if(_projectile_link_libraries)
+    message(FATAL_ERROR
+        "Projectile::Projectile links consumers to other libraries: ${_projectile_link_libraries}")
+endif()
+
 add_executable(consumer "${CMAKE_CURRENT_LIST_DIR}/consumer.cpp")
 # Linking is all a consumer should need: include paths, C++20 and (for shared builds)
 # PROJECTILE_SHARED all come from the target.
