@@ -14,7 +14,8 @@ may contain breaking changes.
   install rules and a CMake package: `find_package(Projectile)` provides the
   `Projectile::Projectile` target. Embedding through `add_subdirectory` or FetchContent is also
   supported.
-- CMake presets: `debug`, `release`, `release-tests`, `sanitize` and `dev`.
+- CMake presets: `debug`, `release`, `release-tests`, `sanitize` and `dev`, plus `bench` for
+  the benchmarks and `demos` for the raylib demos.
 - Version API: `projectile::version()`, `projectile::version_string()`, the
   `projectile::Version` type and the `PROJECTILE_VERSION*` macros. Use them to detect a mismatch
   between headers and library.
@@ -80,10 +81,26 @@ may contain breaking changes.
   `standard_gravity` and `standard_air_density` constants.
 - Examples `01_basic_projectile`, `02_ballistic_drop`, `03_hitscan`, `04_swept_collision` and
   `05_material_interaction`, built by default (`PROJECTILE_BUILD_EXAMPLES`) and run as tests.
+- raylib adapter (`adapters/raylib/`, `PROJECTILE_BUILD_RAYLIB`): the header-only
+  `Projectile::Raylib` target, with conversions between Projectile's and raylib's types and debug
+  drawing of shapes, rays, hits, trajectories and simulated projectiles. It needs raylib 5.5 or
+  newer, and downloads raylib 5.5 if none is installed. It builds with Projectile, or on its own
+  against an installed Projectile. The core library never depends on it.
+- Four raylib demos: `ballistic_drop`, `hitscan_visualizer`, `material_interaction` and
+  `multiple_projectiles`. Each can play a deterministic scripted sequence (`--frames`, `--record`,
+  `--hidden`) and check what it showed; CTest runs these as tests. `tools/record_demos.py`
+  records them as the README's GIFs.
+- Benchmarks (`benchmarks/`, `PROJECTILE_BUILD_BENCHMARKS`): `projectile_benchmarks`, built on
+  Google Benchmark, measures raycasts, intersection tests, sphere sweeps, integrator steps,
+  trajectory predictions and simulation steps of 1,000 to 100,000 projectiles, on workloads that
+  are identical on every platform. Each result records the compiler, flags, build type and CPU,
+  and `benchmarks/report.py` summarizes and compares runs.
 - Documentation of the numerical conventions in `docs/mathematics.md`, of the collision query
   conventions in `docs/collision.md`, of the integrators' accuracy and stability in
-  `docs/ballistics.md`, of the simulation in `docs/simulation.md`, and of material interactions
-  and their assumptions in `docs/materials.md`.
+  `docs/ballistics.md`, of the simulation in `docs/simulation.md`, of material interactions
+  and their assumptions in `docs/materials.md`, of engine integration and the raylib adapter in
+  `docs/integration.md`, and of the benchmark methodology and results in `docs/benchmarks.md`.
+  The README shows recordings of the demos.
 - Test suite built on Catch2 v3:
   - unit tests;
   - integration tests of complete simulation workflows, including tunneling, reproducibility and
@@ -91,7 +108,9 @@ may contain breaking changes.
   - a build-time check that every public header compiles on its own;
   - package tests that consume the installed and the embedded library from a downstream
     project;
-  - property tests that check mathematical properties on seeded random inputs.
+  - property tests that check mathematical properties on seeded random inputs;
+  - a check that the installed library passes no other library on to its consumers.
 - clang-format and clang-tidy configuration.
 - GitHub Actions workflows: CI (GCC, Clang, MSVC and AppleClang; minimum compiler and CMake
-  versions; formatting; static analysis), sanitizers (ASan, LSan, UBSan) and releases.
+  versions; formatting; static analysis), sanitizers (ASan, LSan, UBSan), releases, and the
+  demos and benchmarks (Linux with clang-tidy and the demos under Xvfb, Windows, macOS).
