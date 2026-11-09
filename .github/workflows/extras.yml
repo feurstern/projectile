@@ -1,0 +1,109 @@
+name: Demos and benchmarks
+
+# The raylib adapter, its demos and the benchmarks. They need raylib and Google Benchmark, so
+# they run here, apart from the core library's CI (ci.yml), which never needs either.
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: extras-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  CMAKE_BUILD_PARALLEL_LEVEL: 4
+  CTEST_PARALLEL_LEVEL: 4
+
+jobs:
+  # Everything, under clang-tidy, with the demos' scripted runs in a virtual display; then the
+  # adapter and the demos once more, built on their own against the installed core library.
+  linux:
+    name: Ubuntu / Clang 18 / clang-tidy, demos under Xvfb
+    runs-on: ubuntu-24.04
+    env:
+      CC: clang-18
+      CXX: clang++-18
+      CMAKE_GENERATOR: Ninja
+      # Mesa's software renderer, so that the demos need no graphics card.
+      LIBGL_ALWAYS_SOFTWARE: 1
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.13'
+
+      - name: Install Clang, clang-tidy, Ninja, raylib's build dependencies and Xvfb
+        run: |
+          python -m pip install clang-tidy==22.1.8
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends ninja-build clang-18 \
+            libx11-dev libxcursor-dev libxi-dev libxinerama-dev libxrandr-dev libgl-dev \
+            xvfb xauth libgl1-mesa-dri
+          clang-tidy --version
+
+      - name: Configure
+        run: >-
+          cmake --preset demos
+          -DPROJECTILE_BUILD_BENCHMARKS=ON
+          -DPROJECTILE_WARNINGS_AS_ERRORS=ON
+          -DPROJECTILE_ENABLE_CLANG_TIDY=ON
+          -DPROJECTILE_CLANG_TIDY_EXECUTABLE="$(command -v clang-tidy)"
+
+      - name: Build (runs clang-tidy on every Projectile source)
+        run: cmake --build --preset demos
+
+      - name: Test, including the demos and one run of each benchmark
+        run: xvfb-run --auto-servernum --server-args="-screen 0 1280x720x24" ctest --preset demos
+
+      - name: Summarize a short benchmark run with report.py
+        run: |
+          build/demos/bin/projectile_benchmarks --benchmark_min_time=1x \
+            --benchmark_repetitions=2 --benchmark_report_aggregates_only=true \
+            --benchmark_out="$RUNNER_TEMP/benchmarks.json" --benchmark_out_format=json
+          python benchmarks/report.py "$RUNNER_TEMP/benchmarks.json" "$RUNNER_TEMP/benchmarks.json"
+
+      - name: Install the core library
+        run: cmake --install build/demos --prefix "$RUNNER_TEMP/projectile"
+
+      - name: Build the adapter and the demos on their own, against the installed library
+        run: |
+          cmake -S adapters/raylib -B build/standalone \
+            -DCMAKE_PREFIX_PATH="$RUNNER_TEMP/projectile" -DPROJECTILE_WARNINGS_AS_ERRORS=ON
+          cmake --build build/standalone
+          xvfb-run --auto-servernum --server-args="-screen 0 1280x720x24" \
+            ctest --test-dir build/standalone --output-on-failure
+
+  # The adapter, the demos and the benchmarks build with MSVC (Visual Studio generator) and
+  # AppleClang (Makefiles). The demos need a display, so only the other tests run here.
+  build:
+    name: ${{ matrix.name }} / demos and benchmarks
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Windows / MSVC 2022
+            os: windows-2022
+          - name: macOS / AppleClang
+            os: macos-15
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Configure
+        run: >-
+          cmake --preset demos
+          -DPROJECTILE_BUILD_BENCHMARKS=ON
+          -DPROJECTILE_WARNINGS_AS_ERRORS=ON
+
+      - name: Build
+        run: cmake --build --preset demos
+
+      - name: Test, except the demos
+        run: ctest --preset demos -LE demo
