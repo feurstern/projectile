@@ -39,9 +39,10 @@ Checks: >
   -readability-magic-numbers,
   -readability-math-missing-parentheses
 WarningsAsErrors: '*'
-# Public headers, and the library's internal headers in src/. Dependencies fetched into _deps/
-# are never analyzed.
-HeaderFilterRegex: '(include/projectile|src)/'
+# Public headers (including the raylib adapter's), the library's internal headers in src/, and
+# the headers of the benchmarks and the raylib demos. Dependencies fetched into _deps/ are never
+# analyzed.
+HeaderFilterRegex: '(include/projectile|src|benchmarks|adapters/raylib/examples)/'
 ExcludeHeaderFilterRegex: '_deps/'
 FormatStyle: none
 CheckOptions:

@@ -1,0 +1,8 @@
+---
+# The raylib demos follow the project configuration, with one exception suited to demo programs,
+# as in examples/.clang-tidy:
+#
+#   bugprone-exception-escape  an exception escaping a demo's main simply ends it
+InheritParentConfig: true
+Checks: >
+  -bugprone-exception-escape

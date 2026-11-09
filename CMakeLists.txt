@@ -55,6 +55,9 @@ option(PROJECTILE_BUILD_TESTS "Build the Projectile test suite" ${PROJECTILE_IS_
 option(PROJECTILE_BUILD_EXAMPLES "Build the example programs" ${PROJECTILE_IS_TOP_LEVEL})
 option(PROJECTILE_INSTALL "Generate Projectile's install and package-config rules"
        ${PROJECTILE_IS_TOP_LEVEL})
+# The benchmarks and the raylib adapter bring their own dependencies, so they are always opt-in.
+option(PROJECTILE_BUILD_BENCHMARKS "Build the benchmarks (fetches Google Benchmark if needed)" OFF)
+option(PROJECTILE_BUILD_RAYLIB "Build the raylib adapter and demos (fetches raylib if needed)" OFF)
 option(PROJECTILE_WARNINGS_AS_ERRORS "Treat compiler warnings in Projectile targets as errors" OFF)
 option(PROJECTILE_ENABLE_CLANG_TIDY "Run clang-tidy on Projectile targets during the build" OFF)
 # The standard BUILD_SHARED_LIBS variable selects a shared library instead of a static one.
@@ -171,4 +174,17 @@ endif()
 # With tests enabled, every example also runs as a test (label "example").
 if(PROJECTILE_BUILD_EXAMPLES)
     add_subdirectory(examples)
+endif()
+
+# --------------------------------------------------------------------------------------------
+# Benchmarks and the raylib adapter
+# --------------------------------------------------------------------------------------------
+
+# Optional extras with dependencies of their own. The core library never depends on them.
+if(PROJECTILE_BUILD_BENCHMARKS)
+    add_subdirectory(benchmarks)
+endif()
+
+if(PROJECTILE_BUILD_RAYLIB)
+    add_subdirectory(adapters/raylib)
 endif()

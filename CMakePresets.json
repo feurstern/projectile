@@ -72,6 +72,29 @@
         "PROJECTILE_BUILD_TESTS": "ON",
         "PROJECTILE_WARNINGS_AS_ERRORS": "ON"
       }
+    },
+    {
+      "name": "bench",
+      "displayName": "Benchmarks",
+      "description": "Optimized build of the library and the benchmarks only (fetches Google Benchmark if it is not installed). See docs/benchmarks.md.",
+      "inherits": "base",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "PROJECTILE_BUILD_TESTS": "OFF",
+        "PROJECTILE_BUILD_EXAMPLES": "OFF",
+        "PROJECTILE_BUILD_BENCHMARKS": "ON"
+      }
+    },
+    {
+      "name": "demos",
+      "displayName": "raylib demos",
+      "description": "Optimized build with tests, the raylib adapter and its demos (fetches raylib if it is not installed).",
+      "inherits": "base",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "PROJECTILE_BUILD_TESTS": "ON",
+        "PROJECTILE_BUILD_RAYLIB": "ON"
+      }
     }
   ],
   "buildPresets": [
@@ -104,6 +127,16 @@
       "name": "dev",
       "configurePreset": "dev",
       "configuration": "Debug"
+    },
+    {
+      "name": "bench",
+      "configurePreset": "bench",
+      "configuration": "Release"
+    },
+    {
+      "name": "demos",
+      "configurePreset": "demos",
+      "configuration": "Release"
     }
   ],
   "testPresets": [
@@ -142,6 +175,12 @@
       "inherits": "base",
       "configurePreset": "dev",
       "configuration": "Debug"
+    },
+    {
+      "name": "demos",
+      "inherits": "base",
+      "configurePreset": "demos",
+      "configuration": "Release"
     }
   ]
 }

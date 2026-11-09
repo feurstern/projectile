@@ -41,6 +41,17 @@ git ls-files -z -- '*.hpp' '*.cpp' | xargs -0 -r clang-format --dry-run --Werror
 
 To fix formatting, run the last command with `-i` in place of `--dry-run --Werror`.
 
+The benchmarks and the raylib demos are optional, and download Google Benchmark and raylib if they
+are not installed. Build them when you change them, or code they use:
+
+```sh
+cmake --preset bench && cmake --build --preset bench    # see docs/benchmarks.md
+cmake --preset demos && cmake --build --preset demos && ctest --preset demos
+```
+
+Without a display, the demo tests are skipped; `xvfb-run -a ctest --preset demos` runs them, as CI
+does.
+
 ## Repository layout
 
 | Path | Contents |
@@ -52,9 +63,11 @@ To fix formatting, run the last command with `-i` in place of `--dry-run --Werro
 | `tests/support/` | Shared test helpers: value printers, tolerance matchers, the seeded random generator, an allocation counter. |
 | `tests/package/` | Downstream projects that test installation and embedding. |
 | `examples/` | Example programs, one directory each, run as tests. |
-| `docs/` | Technical documentation: the [mathematical conventions](docs/mathematics.md), the [collision query conventions](docs/collision.md), the [ballistics](docs/ballistics.md), the [simulation](docs/simulation.md) and the [material interactions](docs/materials.md). |
+| `adapters/raylib/` | The optional raylib adapter (`include/`), its demos (`examples/`), their tests, and the script that records the README's GIFs (`tools/`). Not part of the core library. |
+| `benchmarks/` | The benchmarks, their workloads, and `report.py`, which summarizes results. |
+| `docs/` | Technical documentation: the [mathematical conventions](docs/mathematics.md), the [collision query conventions](docs/collision.md), the [ballistics](docs/ballistics.md), the [simulation](docs/simulation.md), the [material interactions](docs/materials.md), [engine integration](docs/integration.md) and the [benchmarks](docs/benchmarks.md). `docs/media/` holds the README's GIFs. |
 | `cmake/` | CMake modules: compiler options, version parsing, the package template. |
-| `.github/workflows/` | CI, sanitizer and release workflows. |
+| `.github/workflows/` | CI, sanitizer, release, and demo-and-benchmark workflows. |
 
 ## Coding conventions
 
@@ -124,6 +137,8 @@ The full conventions are in [docs/mathematics.md](docs/mathematics.md). In short
 - Prefer `std::span` for non-owning ranges.
 - Avoid virtual dispatch and `std::shared_ptr` in hot paths.
 - No SIMD or threading before benchmarks justify it.
+- Measure changes that affect performance: run the benchmarks before and after on the same
+  machine, and compare the runs with `benchmarks/report.py` ([docs/benchmarks.md](docs/benchmarks.md)).
 
 ## Tests
 
@@ -156,7 +171,8 @@ The full conventions are in [docs/mathematics.md](docs/mathematics.md). In short
   generated. A random point meant to lie outside a shape can still land inside it.
 - Test code has its own `tests/.clang-tidy`. It inherits the project configuration and disables
   only a check that misfires on Catch2's macros. Likewise, `examples/.clang-tidy` allows `printf`
-  and exceptions escaping `main` in the example programs.
+  and exceptions escaping `main` in the example programs, and `adapters/raylib/examples/.clang-tidy`
+  allows exceptions escaping `main` in the demos.
 - To prove that code does not allocate, count allocations with `test::allocation_count()`
   (`support/allocation_counter.hpp`) around it, in the integration tests, which replace the
   global `operator new`. Keep Catch2 assertions out of the counted code: they allocate.
@@ -166,6 +182,19 @@ The full conventions are in [docs/mathematics.md](docs/mathematics.md). In short
 - Measure an integrator's order of convergence on a problem that shows it. For example,
   semi-implicit Euler is only first order, yet its error on a circular orbit sampled after whole
   periods shrinks at second order.
+
+## Demos and benchmarks
+
+- The demos use only Projectile's public API and the adapter. CI enforces this by building them
+  on their own against the installed library.
+- Each demo's scripted run checks that the demo shows what it should (`check()` in each demo).
+  Update the check when you change the script.
+- When a demo looks different, record the GIFs again with
+  `python3 adapters/raylib/tools/record_demos.py build/demos --xvfb`, and keep each under about
+  2 MB.
+- Benchmarks draw their inputs from `workloads.hpp`, never from `<random>` distributions, so that
+  every platform measures the same work. When you add one, describe it in
+  [docs/benchmarks.md](docs/benchmarks.md).
 
 ## Definition of done
 
@@ -184,7 +213,8 @@ Compiling is not the same as done.
 ## Pull requests
 
 - Keep each pull request to one logical change, and explain what it does and why.
-- CI must pass: build matrix, sanitizers, clang-tidy and clang-format.
+- CI must pass: build matrix, sanitizers, clang-tidy, clang-format, and the demo and benchmark
+  workflow.
 - Explain any change to an existing public API in the pull request description.
 
 ## Releasing (maintainers)

@@ -6,7 +6,7 @@ collision, and configurable material interactions such as ricochet and penetrati
 only on the C++ standard library. It plugs into your engine through small interfaces instead
 of owning your scene.
 
-> **Status: pre-alpha, Milestone 5 of 7.** In place so far:
+> **Status: pre-alpha, Milestone 6 of 7.** In place so far:
 > - the build, packaging, test and CI foundation;
 > - the math module: vectors, rays, segments, planes, spheres, boxes and triangles;
 > - the collision module: ray, segment and swept-sphere queries, the collision-world interface,
@@ -16,9 +16,24 @@ of owning your scene.
 > - the materials module: materials, and a replaceable interaction model for ricochet,
 >   penetration and energy loss;
 > - the simulation module: many projectiles at a fixed time step, with swept collisions,
->   impacts, lifetimes and events.
+>   impacts, lifetimes and events;
+> - a raylib adapter with four interactive demos, and a benchmark suite.
 >
-> The features marked as planned below are **not implemented yet**.
+> Milestone 7 prepares the first release, v0.1.0.
+
+## Demos
+
+Four interactive [raylib](https://www.raylib.com/) demos show the library at work. These
+recordings are their scripted runs; [adapters/raylib](adapters/raylib/README.md) explains how to
+build, play and record them. The adapter they draw through, and how to connect Projectile to an
+engine, are described in [docs/integration.md](docs/integration.md).
+
+| | |
+|---|---|
+| ![Balls fired from a tower fall in arcs under the gravity of Earth, the Moon and Mars](docs/media/ballistic_drop.gif) | ![Rays from a moving camera hit boxes, spheres, a ramp, a pyramid and a wall, each hit marked with its normal](docs/media/hitscan_visualizer.gif) |
+| **Ballistic drop.** Shots under the gravity of Earth, the Moon and Mars, one with air drag, land exactly where `predict_trajectory()` said they would. | **Hitscan visualizer.** Rays cast from a moving camera, with each hit's point, surface normal, distance and material. |
+| ![Bullets pass through glass and wood, ricochet off a slanted steel plate and stop in concrete](docs/media/material_interaction.gif) | ![Thousands of projectiles spray from a fountain and bounce around an arena](docs/media/multiple_projectiles.gif) |
+| **Material interaction.** Bullets pass through glass and wood, ricochet off steel and stop in concrete, with the energy each impact costs. | **Multiple projectiles.** 16,400 projectiles, up to 15,000 at a time, bounce around an arena, and the demo measures what each update costs. |
 
 ## Feature roadmap
 
@@ -34,8 +49,8 @@ of owning your scene.
 | Wind and aerodynamic drag | v0.2 | Done (Milestone 5) |
 | Material interaction interface | v0.2 | Done (Milestone 5) |
 | Ricochet and penetration | v0.3 | Done (Milestone 5) |
-| raylib visualization adapter and demos | v0.3 | Planned (Milestone 6) |
-| Benchmark suite | v0.3 | Planned (Milestone 6) |
+| raylib visualization adapter and demos | v0.3 | Done (Milestone 6) |
+| Benchmark suite | v0.3 | Done (Milestone 6) |
 | Single-header distribution | v1.0 | Optional |
 
 Material interactions are configurable gameplay approximations. They are not validated
@@ -44,7 +59,8 @@ real-world penetration models.
 ## Architecture
 
 The module layering is shown below. Arrows point from a module to the modules it uses. Every
-module of the core library exists today; the raylib adapter is planned.
+module exists today. The raylib adapter is optional and separate: the core library never
+depends on it.
 
 ```mermaid
 flowchart TD
@@ -77,9 +93,15 @@ flowchart TD
 - **CMake 3.20+.** The presets in `CMakePresets.json` need CMake 3.21+.
 - **Ninja** is recommended but not required. Any CMake generator works.
 
-The library never downloads anything. Only the test suite has a dependency, Catch2 v3. It uses an
-installed Catch2 3 if one is found; otherwise it downloads the pinned v3.16.1 release, which is
-verified by SHA-256.
+The library never downloads anything and depends on the standard library alone. Only the
+optional parts have dependencies, and each uses an installed copy if CMake finds one; otherwise it
+downloads a pinned release, verified by SHA-256:
+
+| Part | Dependency | Downloaded release |
+|---|---|---|
+| Tests | Catch2 3 | v3.16.1 |
+| Benchmarks | Google Benchmark 1.10 or newer | v1.10.0 |
+| raylib adapter and demos | raylib 5.5 or newer (tested with 5.5 and 6.2) | 5.5 |
 
 CI builds and tests these configurations:
 
@@ -92,7 +114,12 @@ CI builds and tests these configurations:
 | macOS 15 | AppleClang | Unix Makefiles | static |
 
 There are also AddressSanitizer + UndefinedBehaviorSanitizer runs with GCC 14 and Clang 18, a
-clang-tidy run and a clang-format check.
+clang-tidy run and a clang-format check. A separate workflow builds the raylib adapter, the demos
+and the benchmarks, apart from the core library's CI, which never needs them:
+
+- on Ubuntu with Clang 18 and clang-tidy. It runs the demos in a virtual display, and builds the
+  adapter once more on its own, against the installed library;
+- on Windows with MSVC 2022, and on macOS with AppleClang.
 
 ## Building
 
@@ -111,6 +138,8 @@ ctest --preset dev             # run the tests
 | `release-tests` | Release | yes | what CI runs |
 | `sanitize` | Debug | yes | ASan, LSan and UBSan; GCC or Clang; not on Windows |
 | `dev` | Debug | yes | warnings as errors |
+| `bench` | Release | no | the library and the benchmarks; see [docs/benchmarks.md](docs/benchmarks.md) |
+| `demos` | Release | yes | with the raylib adapter and its demos |
 
 Each preset builds into `build/<preset>`. Pass `-B <dir>` when configuring to use another
 directory, for example to keep GCC and Clang builds side by side.
@@ -129,6 +158,8 @@ ctest --test-dir build --output-on-failure
 |---|---|---|
 | `PROJECTILE_BUILD_TESTS` | ON at top level | Build the test suite. This fetches Catch2 3 if it is not installed. |
 | `PROJECTILE_BUILD_EXAMPLES` | ON at top level | Build the example programs in `examples/`. |
+| `PROJECTILE_BUILD_BENCHMARKS` | OFF | Build the benchmarks. This fetches Google Benchmark if it is not installed. |
+| `PROJECTILE_BUILD_RAYLIB` | OFF | Build the raylib adapter and its demos. This fetches raylib if it is not installed. |
 | `PROJECTILE_INSTALL` | ON at top level | Generate install rules and the `find_package` package. |
 | `PROJECTILE_WARNINGS_AS_ERRORS` | OFF | Treat warnings in Projectile's own targets as errors. |
 | `PROJECTILE_ENABLE_CLANG_TIDY` | OFF | Run clang-tidy on Projectile's sources while building (Ninja and Makefile generators). |
@@ -407,7 +438,9 @@ The programs in [examples/](examples/) are built with the project:
 | [04_swept_collision](examples/04_swept_collision/main.cpp) | A simulation driven by uneven frame times, stopping bullets of up to 2,000 m/s at a 1 cm plate |
 | [05_material_interaction](examples/05_material_interaction/main.cpp) | Bullets with drag and wind shot into wood, steel, concrete and dirt: ricochets, penetrations and stops, with the energy each costs |
 
-Run them from the build directory, for example `build/dev/bin/02_ballistic_drop`.
+Run them from the build directory, for example `build/dev/bin/02_ballistic_drop`. The
+interactive raylib demos are in [adapters/raylib](adapters/raylib/README.md); see
+[Demos](#demos).
 
 ## Tests
 
@@ -423,9 +456,36 @@ Run them from the build directory, for example `build/dev/bin/02_ballistic_drop`
   small downstream project with `find_package(Projectile)` and with `add_subdirectory`. These
   take a few seconds; skip them with `ctest --preset dev -LE package`.
 - `example`: runs each example program, which must complete successfully.
+- `demo`: plays each raylib demo's scripted sequence in a hidden window, and checks what it
+  showed (with `PROJECTILE_BUILD_RAYLIB`). Without a display, these tests are skipped; CI runs
+  them under Xvfb.
+- `raylib`: unit tests of the raylib adapter's conversions.
+- `benchmark`: runs each benchmark once, to check that they work (with
+  `PROJECTILE_BUILD_BENCHMARKS`).
 
 During the build, every public header is also compiled on its own, which proves that each
 header is self-contained.
+
+## Benchmarks
+
+The benchmark suite measures ray and sweep queries, integration, trajectory prediction and whole
+simulation steps. [docs/benchmarks.md](docs/benchmarks.md) describes each benchmark and the
+methodology, and lists every result. Some of them, on one core of an Intel Core 7 240H laptop
+(GCC 16.2, Release):
+
+| Workload | Time | Throughput |
+|---|--:|--:|
+| 10,000 raycasts into a world of 38 shapes | 4.67 ms | 2.2 million rays/s |
+| 100,000 raycasts into a world of 38 shapes | 46.7 ms | 2.2 million rays/s |
+| One step of 1,000 projectiles in free flight | 6.3 µs | 160 million updates/s |
+| One step of 10,000 projectiles in free flight | 72 µs | 140 million updates/s |
+| One step of 100,000 projectiles in free flight | 0.87 ms | 116 million updates/s |
+| One step of 10,000 projectiles bouncing among 38 shapes | 24.5 ms | 414,000 updates/s |
+| A predicted trajectory of 600 samples (10 s) | 18.2 µs | 33 million samples/s |
+
+Two runs, one after the other, differed by 1.3% at the median. `PrimitiveWorld` tests every shape
+for every query, so collisions dominate the cost of the last simulation. Larger scenes call for a
+collision world with a spatial index.
 
 ## Contributing
 
